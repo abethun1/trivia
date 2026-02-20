@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 //Screens
 import 'screens/dashboard_screen.dart';
 import 'screens/login_screen.dart';
+import 'screens/loading_screen.dart';
 
 //Packages
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -53,7 +54,7 @@ class AuthGate extends StatelessWidget
     } 
     else 
     {
-      return const DashboardScreen();
+      return const LoadingScreen();
     }
   }
 }

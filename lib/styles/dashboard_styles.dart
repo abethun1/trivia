@@ -23,8 +23,8 @@ class DashboardStyles {
 
   // DECORATIONS
   static final BoxDecoration statsCardDecoration = BoxDecoration(
-    color: cardBackground,
-    borderRadius: BorderRadius.circular(12),
+    color: const Color.fromARGB(255, 125, 121, 138),
+    borderRadius: BorderRadius.circular(20),
     boxShadow: const [
       BoxShadow(
         blurRadius: 6,

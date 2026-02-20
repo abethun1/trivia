@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
 import 'dashboard_screen.dart';
+import 'loading_screen.dart';
 import '../styles/login_styles.dart';
 
 class LoginScreen extends StatefulWidget 
@@ -24,6 +26,40 @@ class _LoginScreenState extends State<LoginScreen>
 
   bool isLogin = true;
   bool loading = false;
+  
+  bool canSubmit()
+  {
+    if (isLogin)
+    {
+      return emailController.text.isNotEmpty &&
+             passwordController.text.isNotEmpty;
+    }
+    else
+    {
+      return usernameController.text.isNotEmpty &&
+             emailController.text.isNotEmpty &&
+             passwordController.text.isNotEmpty;
+    }
+  }
+
+  @override
+  void initState()
+  {
+    super.initState();
+
+    emailController.addListener(() => setState(() {}));
+    passwordController.addListener(() => setState(() {}));
+    usernameController.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose()
+  {
+    emailController.dispose();
+    passwordController.dispose();
+    usernameController.dispose();
+    super.dispose();
+  }
 
   Future<void> submit() async 
   {
@@ -75,7 +111,7 @@ class _LoginScreenState extends State<LoginScreen>
         context,
         MaterialPageRoute
         (
-          builder: (_) => const DashboardScreen(),
+          builder: (_) => const LoadingScreen(),
         ),
       );
     } 
@@ -161,6 +197,7 @@ class _LoginScreenState extends State<LoginScreen>
                     child: TextField
                     (
                       controller: passwordController,
+                      obscureText: true,
                       decoration: LoginStyles.inputDecoration("Password"),
                     ),
                   ),
@@ -172,7 +209,7 @@ class _LoginScreenState extends State<LoginScreen>
                     width: double.infinity,
                     child: ElevatedButton
                     (
-                      onPressed: loading ? null : submit,
+                      onPressed: loading || !canSubmit() ? null : submit,
                       style: LoginStyles.mainButtonStyle,
                       child: Text
                       (

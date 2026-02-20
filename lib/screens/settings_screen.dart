@@ -10,9 +10,9 @@ class SettingsScreen extends StatelessWidget
   void signOut(BuildContext context) async
   {
     await Supabase.instance.client.auth.signOut();
-  
+
     if (!context.mounted) return;
-  
+
     Navigator.pushAndRemoveUntil
     (
       context,
@@ -23,14 +23,8 @@ class SettingsScreen extends StatelessWidget
       (route) => false,
     );
   }
-  
-  Widget buildButton
-  (
-    {
-      required String text,
-      required VoidCallback onPressed,
-    }
-  )
+
+  Widget buildButton({required String text, required VoidCallback onPressed})
   {
     return Padding
     (
