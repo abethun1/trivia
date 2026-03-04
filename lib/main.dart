@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 
 //Screens
-import 'screens/dashboard_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/loading_screen.dart';
 
 //Packages
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 void main() async
 {
@@ -34,6 +34,10 @@ class TriviaApp extends StatelessWidget
     (
       debugShowCheckedModeBanner: false,
       title: "Trivia Game",
+      theme: ThemeData
+      (
+        textTheme: GoogleFonts.fredokaTextTheme(),
+      ),
       home: const AuthGate(),
     );
   }

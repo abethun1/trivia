@@ -6,6 +6,7 @@ import '../dialogs/game_score_dialog.dart';
 import '../models/game.dart';
 import '../services/question_generator_service.dart';
 import '../styles/question_style.dart';
+import '../utils/html_entity_decoder.dart';
 
 class QuestionScreen extends StatefulWidget {
   final Game game;
@@ -69,7 +70,20 @@ class _QuestionScreenState extends State<QuestionScreen> {
         .eq('round', widget.game.currentRound)
         .limit(questionCount);
 
-    questions = List<Map<String, dynamic>>.from(data);
+    questions = List<Map<String, dynamic>>.from(data)
+        .map<Map<String, dynamic>>((row) {
+      final decoded = Map<String, dynamic>.from(row);
+      decoded['category'] = decodeHtmlEntities((row['category'] ?? '').toString());
+      decoded['question'] = decodeHtmlEntities((row['question'] ?? '').toString());
+      decoded['correct_answer'] =
+          decodeHtmlEntities((row['correct_answer'] ?? '').toString());
+
+      final wrongRaw = row['wrong_answers'] as List<dynamic>? ?? [];
+      decoded['wrong_answers'] = wrongRaw
+          .map((item) => decodeHtmlEntities(item.toString()))
+          .toList();
+      return decoded;
+    }).toList();
 
     if (!mounted) return;
     setState(() {

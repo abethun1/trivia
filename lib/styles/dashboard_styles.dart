@@ -48,7 +48,7 @@ class DashboardStyles {
   );
 
   // SIZES / PADDING
-  static const double gameCircleSize = 70;
+  static const double gameCircleSize = 82;
   static const EdgeInsets gameCirclePadding =
       EdgeInsets.symmetric(horizontal: 8);
 }

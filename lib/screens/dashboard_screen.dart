@@ -16,6 +16,8 @@ import 'question_screen.dart';
 //Dialogs
 import '../dialogs/dashboard_dailogs.dart';
 import '../dialogs/game_score_dialog.dart';
+import '../widgets/profile_avatar.dart';
+import '../widgets/split_game_avatar.dart';
 
 //Services
 import '../services/question_generator_service.dart';
@@ -40,6 +42,83 @@ class DashboardScreen extends StatefulWidget
 
 class _DashboardScreenState extends State<DashboardScreen> 
 {
+  UserProfile fallbackProfile(String id)
+  {
+    return UserProfile.fromMap(
+      {
+        'id': id,
+        'username': '?',
+      },
+    );
+  }
+
+  List<UserProfile> orderedPlayersForGame(
+    Game game,
+    Map<String, UserProfile> profilesById,
+  )
+  {
+    final creator = profilesById[game.creatorId] ?? fallbackProfile(game.creatorId);
+
+    final opponentId = game.playerIds.firstWhere(
+      (id) => id != game.creatorId,
+      orElse: () => game.creatorId,
+    );
+    final opponent = profilesById[opponentId] ?? fallbackProfile(opponentId);
+
+    return [creator, opponent];
+  }
+
+  Widget buildGameAvatarButton(
+    Game game,
+    Map<String, UserProfile> profilesById, {
+    VoidCallback? onTap,
+  })
+  {
+    final players = orderedPlayersForGame(game, profilesById);
+
+    final child = SplitGameAvatar(
+      topLeftPlayer: players.first,
+      bottomRightPlayer: players.last,
+      size: DashboardStyles.gameCircleSize,
+    );
+
+    return Padding(
+      padding: DashboardStyles.gameCirclePadding,
+      child: GestureDetector(
+        onTap: onTap,
+        child: child,
+      ),
+    );
+  }
+
+  late UserProfile profile;
+
+  @override
+  void initState()
+  {
+    super.initState();
+    profile = widget.userProfile;
+  }
+
+  Future<void> refreshUserProfile() async
+  {
+    final client = Supabase.instance.client;
+    final user = client.auth.currentUser;
+    if (user == null) return;
+
+    final data = await client
+        .from('user_profiles')
+        .select()
+        .eq('id', user.id)
+        .single();
+
+    if (!mounted) return;
+
+    setState(() {
+      profile = UserProfile.fromMap(data);
+    });
+  }
+
   Map<String, List<Game>> bucketGames(List<Game> games, String userId)
   {
     final buckets = <String, List<Game>>
@@ -93,6 +172,8 @@ Future<void> onRequestTap(Game game) async
 
   final hostUsername = profile["username"];
 
+  if (!mounted) return;
+
   final result = await showInviteDialog(
     context: context,
     hostUsername: hostUsername,
@@ -127,6 +208,7 @@ Future<void> onRequestTap(Game game) async
         "current_turn_player_id": game.creatorId,
       }).eq("id", game.id);
 
+    if (!mounted) return;
     showGameCreatingDialog(context);
 
     await generateRoundQuestions
@@ -135,6 +217,7 @@ Future<void> onRequestTap(Game game) async
       round: 1,
     );
 
+    if (!mounted) return;
     Navigator.pop(context);
     }
     else
@@ -147,6 +230,7 @@ Future<void> onRequestTap(Game game) async
     }
 
 
+    if (!mounted) return;
     setState(() {});
   }
 }
@@ -173,6 +257,7 @@ Future<void> onRequestTap(Game game) async
         .from('games')
         .insert(game.toInsertJson());
 
+    if (!mounted) return;
     setState(() {});
   }
 
@@ -193,6 +278,34 @@ Future<List<Game>> fetchMyGames() async
       data.map<Game>((row) => Game.fromJson(row)).toList();
 
   return games;
+}
+
+Future<Map<String, UserProfile>> fetchProfilesForGames(List<Game> games) async
+{
+  final ids = <String>{};
+  for (final game in games)
+  {
+    ids.addAll(game.playerIds);
+  }
+
+  if (ids.isEmpty)
+  {
+    return {};
+  }
+
+  final rows = await Supabase.instance.client
+      .from('user_profiles')
+      .select('id, username, rank, top_category, correct_answers, avatar_path, avatar_pending_path, avatar_status, avatar_color_hex')
+      .inFilter('id', ids.toList());
+
+  final map = <String, UserProfile>{};
+  for (final row in rows)
+  {
+    final p = UserProfile.fromMap(row);
+    map[p.id] = p;
+  }
+
+  return map;
 }
 
 Future<void> onEndedGameTap(Game game) async
@@ -222,7 +335,7 @@ Future<void> onEndedGameTap(Game game) async
     orElse: () => userId,
   );
 
-  final currentUsername = usernames[userId] ?? widget.userProfile.username;
+  final currentUsername = usernames[userId] ?? profile.username;
   final opponentUsername = usernames[opponentId] ?? 'Opponent';
 
   final currentScore = game.scores[userId] ?? 0;
@@ -243,6 +356,8 @@ Future<void> onEndedGameTap(Game game) async
     }
   }
 
+  if (!mounted) return;
+
   await showEndedGameScoreDialog(
     context: context,
     winnerName: winnerName,
@@ -253,7 +368,11 @@ Future<void> onEndedGameTap(Game game) async
   );
 }
   
-  Widget buildGameSection(String title, List<String> games)
+  Widget buildGameSection(
+    String title,
+    List<Game> games,
+    Map<String, UserProfile> profilesById,
+  )
   {
     if (games.isEmpty)
     {
@@ -279,18 +398,9 @@ Future<void> onEndedGameTap(Game game) async
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: Row(
-            children: games.map((game) {
-              return Padding(
-                padding: DashboardStyles.gameCirclePadding,
-                child: Container(
-                  width: DashboardStyles.gameCircleSize,
-                  height: DashboardStyles.gameCircleSize,
-                  decoration: DashboardStyles.gameCircleDecoration,
-                  alignment: Alignment.center,
-                  child: Text(game, style: DashboardStyles.gameCircleText),
-                ),
-              );
-            }).toList(),
+            children: games
+                .map((game) => buildGameAvatarButton(game, profilesById))
+                .toList(),
           ),
         ),
       ],
@@ -298,7 +408,11 @@ Future<void> onEndedGameTap(Game game) async
   }
 
   //================= NEW REQUEST SECTION =================
-  Widget buildRequestSection(String title, List<Game> games)
+  Widget buildRequestSection(
+    String title,
+    List<Game> games,
+    Map<String, UserProfile> profilesById,
+  )
   {
     if (games.isEmpty)
     {
@@ -321,34 +435,26 @@ Future<void> onEndedGameTap(Game game) async
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: Row(
-            children: games.map((game) {
-              return Padding(
-                padding: DashboardStyles.gameCirclePadding,
-                child: GestureDetector(
-                  onTap: ()
-                  {
-                    onRequestTap(game);
-                  },
-                  child: Container(
-                    width: DashboardStyles.gameCircleSize,
-                    height: DashboardStyles.gameCircleSize,
-                    decoration: DashboardStyles.gameCircleDecoration,
-                    alignment: Alignment.center,
-                    child: Text(
-                      game.id.toString().substring(0, 4),
-                      style: DashboardStyles.gameCircleText,
-                    ),
+            children: games
+                .map(
+                  (game) => buildGameAvatarButton(
+                    game,
+                    profilesById,
+                    onTap: () => onRequestTap(game),
                   ),
-                ),
-              );
-            }).toList(),
+                )
+                .toList(),
           ),
         ),
       ],
     );
   }
 
-  Widget buildYourTurnSection(String title, List<Game> games) {
+  Widget buildYourTurnSection(
+    String title,
+    List<Game> games,
+    Map<String, UserProfile> profilesById,
+  ) {
     if (games.isEmpty) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -369,40 +475,35 @@ Future<void> onEndedGameTap(Game game) async
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: Row(
-            children: games.map((game) {
-              return Padding(
-                padding: DashboardStyles.gameCirclePadding,
-                child: GestureDetector(
-                  onTap: () async {
-                    await Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => QuestionScreen(game: game),
-                      ),
-                    );
-                    if (!mounted) return;
-                    setState(() {});
-                  },
-                  child: Container(
-                    width: DashboardStyles.gameCircleSize,
-                    height: DashboardStyles.gameCircleSize,
-                    decoration: DashboardStyles.gameCircleDecoration,
-                    alignment: Alignment.center,
-                    child: Text(
-                      game.id.substring(0, 4),
-                      style: DashboardStyles.gameCircleText,
-                    ),
+            children: games
+                .map(
+                  (game) => buildGameAvatarButton(
+                    game,
+                    profilesById,
+                    onTap: () async {
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => QuestionScreen(game: game),
+                        ),
+                      );
+                      if (!mounted) return;
+                      setState(() {});
+                    },
                   ),
-                ),
-              );
-            }).toList(),
+                )
+                .toList(),
           ),
         ),
       ],
     );
   }
 
-  Widget buildEndedSection(String title, List<Game> games)
+  Widget buildEndedSection(
+    String title,
+    List<Game> games,
+    Map<String, UserProfile> profilesById,
+  )
   {
     if (games.isEmpty)
     {
@@ -424,24 +525,15 @@ Future<void> onEndedGameTap(Game game) async
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: Row(
-            children: games.map((game) {
-              return Padding(
-                padding: DashboardStyles.gameCirclePadding,
-                child: GestureDetector(
-                  onTap: () => onEndedGameTap(game),
-                  child: Container(
-                    width: DashboardStyles.gameCircleSize,
-                    height: DashboardStyles.gameCircleSize,
-                    decoration: DashboardStyles.gameCircleDecoration,
-                    alignment: Alignment.center,
-                    child: Text(
-                      game.id.substring(0, 4),
-                      style: DashboardStyles.gameCircleText,
-                    ),
+            children: games
+                .map(
+                  (game) => buildGameAvatarButton(
+                    game,
+                    profilesById,
+                    onTap: () => onEndedGameTap(game),
                   ),
-                ),
-              );
-            }).toList(),
+                )
+                .toList(),
           ),
         ),
       ],
@@ -453,7 +545,7 @@ Future<void> onEndedGameTap(Game game) async
     final size = MediaQuery.of(context).size;
 
     return Scaffold(
-      appBar: AppBar(title: Text("${widget.userProfile.username} Dashboard")),
+      appBar: AppBar(title: Text("${profile.username} Dashboard")),
       body: SingleChildScrollView(
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -473,9 +565,9 @@ Future<void> onEndedGameTap(Game game) async
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children:
                         [
-                          Text("Rank: ${widget.userProfile.rank}", style: DashboardStyles.statsText),
-                          Text("Top Category: ${widget.userProfile.top_category}", style: DashboardStyles.statsText),
-                          Text("Correct Answers: ${widget.userProfile.correctAnswers}", style: DashboardStyles.statsText),
+                          Text("Rank: ${profile.rank}", style: DashboardStyles.statsText),
+                          Text("Top Category: ${profile.top_category}", style: DashboardStyles.statsText),
+                          Text("Correct Answers: ${profile.correctAnswers}", style: DashboardStyles.statsText),
                         ],
                       ),
                     ),
@@ -483,31 +575,47 @@ Future<void> onEndedGameTap(Game game) async
                   const SizedBox(width: 12),
                   GestureDetector
                   (
-                    onTap: ()
+                    onTap: () async
                     {
-                      Navigator.push
+                      final updatedProfile = await Navigator.push<UserProfile>
                       (
                         context,
                         MaterialPageRoute
                         (
-                          builder: (_) => const SettingsScreen(),
+                          builder: (_) => SettingsScreen(userProfile: profile),
                         ),
                       );
+
+                      if (!mounted) return;
+
+                      if (updatedProfile != null)
+                      {
+                        setState(() {
+                          profile = updatedProfile;
+                        });
+                      }
+                      else
+                      {
+                        await refreshUserProfile();
+                      }
                     },
                     child: Column
                     (
                       children: 
                       [
-                        const CircleAvatar
+                        ProfileAvatar
                         (
+                          username: profile.username,
+                          avatarPath: profile.avatarPath,
+                          avatarStatus: profile.avatarStatus,
+                          avatarColorHex: profile.avatarColorHex,
                           radius: 38,
-                          backgroundColor: Color.fromARGB(255, 197, 38, 38),
-                        ), 
+                        ),
 
                         const SizedBox(height: 6),
                         Text
                         (
-                          widget.userProfile.username,
+                          profile.username,
                           style: const TextStyle
                           (
                             fontSize: 18,
@@ -547,59 +655,80 @@ Future<void> onEndedGameTap(Game game) async
                   }
 
                   final games = snapshot.data!;
-                  final userId = Supabase.instance.client.auth.currentUser!.id;
-                  final buckets = bucketGames(games, userId);
-                  final requestGames = buckets["request"]!;
-                  final waitingGames = buckets["waiting"]!;
-                  final yourTurnGames = buckets["yourTurn"]!;
-                  final theirTurnGames = buckets["theirTurn"]!;
-                  final endedGames = buckets["ended"]!;
 
-                  return Column
-                  (
-                    children:
-                    [
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: buildYourTurnSection(
-                          "Your Turn",
-                          yourTurnGames,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
+                  return FutureBuilder<Map<String, UserProfile>>(
+                    future: fetchProfilesForGames(games),
+                    builder: (context, profilesSnapshot)
+                    {
+                      if (!profilesSnapshot.hasData)
+                      {
+                        return const CircularProgressIndicator();
+                      }
 
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: buildGameSection(
-                          "Their Turn",
-                          theirTurnGames.map((g) => g.id.substring(0, 4)).toList(),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
+                      final profilesById = profilesSnapshot.data!;
+                      final userId = Supabase.instance.client.auth.currentUser!.id;
+                      final buckets = bucketGames(games, userId);
+                      final requestGames = buckets["request"]!;
+                      final waitingGames = buckets["waiting"]!;
+                      final yourTurnGames = buckets["yourTurn"]!;
+                      final theirTurnGames = buckets["theirTurn"]!;
+                      final endedGames = buckets["ended"]!;
 
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: buildGameSection(
-                          "Waiting",
-                          waitingGames.map((g) => g.id.substring(0, 4)).toList(),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
+                      return Column
+                      (
+                        children:
+                        [
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: buildYourTurnSection(
+                              "Your Turn",
+                              yourTurnGames,
+                              profilesById,
+                            ),
+                          ),
+                          const SizedBox(height: 25),
 
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: buildRequestSection("Request", requestGames),
-                      ),
-                      const SizedBox(height: 16),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: buildGameSection(
+                              "Their Turn",
+                              theirTurnGames,
+                              profilesById,
+                            ),
+                          ),
+                          const SizedBox(height: 25),
 
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: buildEndedSection(
-                          "Ended Games",
-                          endedGames,
-                        ),
-                      ),
-                    ],
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: buildGameSection(
+                              "Waiting",
+                              waitingGames,
+                              profilesById,
+                            ),
+                          ),
+                          const SizedBox(height: 25),
+
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: buildRequestSection(
+                              "Request",
+                              requestGames,
+                              profilesById,
+                            ),
+                          ),
+                          const SizedBox(height: 25),
+
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: buildEndedSection(
+                              "Ended Games",
+                              endedGames,
+                              profilesById,
+                            ),
+                          ),
+                        ],
+                      );
+                    },
                   );
                 },
               ),

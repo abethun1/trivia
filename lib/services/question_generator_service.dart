@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../constants/trivia_category_map.dart';
+import '../utils/html_entity_decoder.dart';
 
 const int finalRoundNumber = 3;
 
@@ -81,11 +82,13 @@ Future<void> generateRoundQuestions({
     rows.add({
       "game_id": gameId,
       "round": round,
-      "category": q['category'],
+      "category": decodeHtmlEntities(q['category'] as String),
       "difficulty": q['difficulty'],
-      "question": q['question'],
-      "correct_answer": q['correct_answer'],
-      "wrong_answers": List<String>.from(q['incorrect_answers']),
+      "question": decodeHtmlEntities(q['question'] as String),
+      "correct_answer": decodeHtmlEntities(q['correct_answer'] as String),
+      "wrong_answers": List<String>.from(q['incorrect_answers'])
+          .map(decodeHtmlEntities)
+          .toList(),
     });
   }
 

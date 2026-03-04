@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'dashboard_screen.dart';
 import 'loading_screen.dart';
 import '../styles/login_styles.dart';
 
@@ -26,6 +25,43 @@ class _LoginScreenState extends State<LoginScreen>
 
   bool isLogin = true;
   bool loading = false;
+  String? formMessage;
+
+  Future<bool> usernameTaken(String username) async
+  {
+    final normalized = username.trim();
+    final existing = await supabase
+        .from('user_profiles')
+        .select('id')
+        .ilike('username', normalized)
+        .limit(1);
+
+    return existing.isNotEmpty;
+  }
+
+  Future<bool> emailTakenInProfiles(String email) async
+  {
+    final normalized = email.trim().toLowerCase();
+    final existing = await supabase
+        .from('user_profiles')
+        .select('id')
+        .ilike('email', normalized)
+        .limit(1);
+
+    return existing.isNotEmpty;
+  }
+
+  void setFormMessage(String? message)
+  {
+    if (!mounted) return;
+    setState
+    (
+      ()
+      {
+        formMessage = message;
+      },
+    );
+  }
   
   bool canSubmit()
   {
@@ -63,6 +99,8 @@ class _LoginScreenState extends State<LoginScreen>
 
   Future<void> submit() async 
   {
+    setFormMessage(null);
+
     setState
     (
       ()
@@ -77,15 +115,41 @@ class _LoginScreenState extends State<LoginScreen>
       {
         await supabase.auth.signInWithPassword
         (
-          email: emailController.text,
+          email: emailController.text.trim(),
           password: passwordController.text,
         );
       } 
       else 
       {
+        final desiredUsername = usernameController.text.trim();
+        final desiredEmail = emailController.text.trim().toLowerCase();
+
+        final usernameIsTaken = await usernameTaken(desiredUsername);
+        if (usernameIsTaken)
+        {
+          setFormMessage("Username already taken");
+          return;
+        }
+
+        bool emailIsTaken = false;
+        try
+        {
+          emailIsTaken = await emailTakenInProfiles(desiredEmail);
+        }
+        catch (_)
+        {
+          // If email column does not exist yet, rely on Auth error handling.
+        }
+
+        if (emailIsTaken)
+        {
+          setFormMessage("Email already taken");
+          return;
+        }
+
         final res = await supabase.auth.signUp
         (
-          email: emailController.text,
+          email: desiredEmail,
           password: passwordController.text,
         );
 
@@ -95,7 +159,8 @@ class _LoginScreenState extends State<LoginScreen>
           (
             {
               'id': res.user!.id,
-              'username': usernameController.text,
+              'username': desiredUsername,
+              'email': desiredEmail,
             },
           );
         }
@@ -115,24 +180,52 @@ class _LoginScreenState extends State<LoginScreen>
         ),
       );
     } 
+    on AuthException catch (e)
+    {
+      final lower = e.message.toLowerCase();
+      if (lower.contains("already registered") ||
+          lower.contains("already exists"))
+      {
+        setFormMessage("Email already taken");
+      }
+      else
+      {
+        setFormMessage(e.message);
+      }
+    }
+    on PostgrestException catch (e)
+    {
+      final lower = e.message.toLowerCase();
+      if (lower.contains('username'))
+      {
+        setFormMessage("Username already taken");
+      }
+      else if (lower.contains('email'))
+      {
+        setFormMessage("Email already taken");
+      }
+      else
+      {
+        setFormMessage(e.message);
+      }
+    }
     catch (e) 
     {
-      ScaffoldMessenger.of(context).showSnackBar
-      (
-        SnackBar
-        (
-          content: Text(e.toString()),
-        ),
-      );
+      setFormMessage(e.toString());
     }
-
-    setState
-    (
-      ()
+    finally
+    {
+      if (mounted)
       {
-        loading = false;
-      },
-    );
+        setState
+        (
+          ()
+          {
+            loading = false;
+          },
+        );
+      }
+    }
   }
 
   @override
@@ -234,6 +327,7 @@ class _LoginScreenState extends State<LoginScreen>
                         ()
                         {
                           isLogin = !isLogin;
+                          formMessage = null;
                         },
                       );
                     },
@@ -244,6 +338,20 @@ class _LoginScreenState extends State<LoginScreen>
                         : "Already have an account? Login",
                     ),
                   ),
+
+                  if (formMessage != null) ...[
+                    const SizedBox(height: 10),
+                    Text
+                    (
+                      formMessage!,
+                      style: const TextStyle
+                      (
+                        color: Colors.black,
+                        fontSize: 14,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
                 ],
               ),
             ),
