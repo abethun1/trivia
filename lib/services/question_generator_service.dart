@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
-import 'dart:async';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../constants/trivia_category_map.dart';
+
+const int finalRoundNumber = 3;
 
 Future<String> _getToken() async {
   final res = await http.get(
@@ -38,7 +40,6 @@ Future<void> generateRoundQuestions({
   final List<Map<String, dynamic>> rows = [];
   final Set<String> seenQuestions = {};
 
-  // determine allowed difficulties for this round
   List<String> allowedDifficulties;
   if (round == 1) {
     allowedDifficulties = ['easy', 'medium'];
@@ -48,17 +49,15 @@ Future<void> generateRoundQuestions({
     allowedDifficulties = ['hard'];
   }
 
-  while (rows.length < 5) {
+  final questionTargetCount = round >= finalRoundNumber ? 1 : 5;
+
+  while (rows.length < questionTargetCount) {
     await Future.delayed(const Duration(seconds: 1));
 
-    // pick random category NAME
     final categoryName = categoryNames[random.nextInt(categoryNames.length)];
-
-    // convert to OpenTrivia ID
     final categoryId = triviaCategoryMap[categoryName];
     if (categoryId == null) continue;
 
-    // pick random difficulty from allowed ones
     final difficulty =
         allowedDifficulties[random.nextInt(allowedDifficulties.length)];
 
@@ -91,6 +90,4 @@ Future<void> generateRoundQuestions({
   }
 
   await supabase.from('game_questions').insert(rows);
-
-  print("✅ Inserted ${rows.length} questions");
 }

@@ -166,16 +166,21 @@ class _CategorySelectScreenState extends State<CategorySelectScreen>
             ),
             ElevatedButton
             (
-              onPressed: ()
+              onPressed: () async
               {
-                final game = Game
+                final gameDraft = Game
                 (
                   id: '',
                   creatorId: supabase.auth.currentUser!.id,
-                  playerIds: widget.players!.map((p) => p.id).toList(),
+                  playerIds:
+                  [
+                    supabase.auth.currentUser!.id,
+                    widget.players!.first.id,
+                  ],
                   acceptedPlayers:
                   {
-                    for (final p in widget.players!) p.id : false,
+                    supabase.auth.currentUser!.id : true,
+                    widget.players!.first.id : false,
                   },
                   playerCategories:
                   {
@@ -183,16 +188,17 @@ class _CategorySelectScreenState extends State<CategorySelectScreen>
                   },
                   scores:
                   {
-                    for (final p in widget.players!) p.id : 0,
+                    supabase.auth.currentUser!.id : 0,
+                    widget.players!.first.id : 0,
                   },
-                  currentRound: 1,
+                  currentRound: 0,
                   currentTurnPlayerId: supabase.auth.currentUser!.id,
                   status: 'pending',
                   createdAt: DateTime.now(),
                 );
 
                 Navigator.pop(dialogContext);
-                Navigator.pop(screenContext, game);
+                Navigator.pop(screenContext, gameDraft);
               },
               child: const Text("Confirm"),
             ),

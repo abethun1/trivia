@@ -31,7 +31,6 @@ class Game
     }
   );
 
-  // ---------- TO JSON (FULL OBJECT) ----------
   Map<String, dynamic> toJson() 
   {
     return {
@@ -48,7 +47,6 @@ class Game
     };
   }
 
-  // ---------- TO JSON (FOR INSERT) ----------
   Map<String, dynamic> toInsertJson()
   {
     return {
@@ -63,7 +61,6 @@ class Game
     };
   }
 
-  // ---------- FROM JSON ----------
   static Game fromJson(Map<String, dynamic> json) 
   {
     return Game

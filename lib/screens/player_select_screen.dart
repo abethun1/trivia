@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/user_profile.dart';
 import '../models/game.dart';
 
@@ -24,50 +25,51 @@ class PlayerSelectScreen extends StatefulWidget
 
 class _PlayerSelectScreenState extends State<PlayerSelectScreen>
 {
-  static const int maxPlayers = 3;
+  static const int maxPlayers = 1;
 
-  List<UserProfile> selectedPlayers = [];
+  final supabase = Supabase.instance.client;
+  final TextEditingController searchController = TextEditingController();
+  bool loading = false;
 
-  void addPlayerSlot(UserProfile user)
+  List<UserProfile> players = [];
+  UserProfile? selectedOpponent;
+
+
+  @override
+  void initState()
   {
-    if (selectedPlayers.length < maxPlayers)
-    {
-      setState
-      (
-        ()
-        {
-          selectedPlayers.add(user);
-        },
-      );
-    }
+    super.initState();
+    fetchPlayers();
   }
 
-  void removePlayerSlot(int index)
+  Future<void> fetchPlayers({String query = ""}) async
   {
     setState
     (
       ()
       {
-        selectedPlayers.removeAt(index);
+        loading = true;
       },
     );
-  }
 
-  Future<void> openPlayerPicker() async
-  {
-    final selectedUser = await showDialog<UserProfile>
+    final data = await supabase
+        .from('user_profiles')
+        .select('id, username, rank, top_category, correct_answers')
+        .neq('id', supabase.auth.currentUser!.id)
+        .ilike('username', '%$query%')
+        .limit(6);
+
+    data.shuffle();
+    
+    setState
     (
-      context: context,
-      builder: (context)
+      ()
       {
-        return PlayerSearchDialog(selectedPlayers: selectedPlayers);
+        players =
+            data.map<UserProfile>((row) => UserProfile.fromMap(row)).toList();
+        loading = false;
       },
     );
-
-    if (selectedUser != null)
-    {
-      addPlayerSlot(selectedUser);
-    }
   }
 
   @override
@@ -80,22 +82,33 @@ class _PlayerSelectScreenState extends State<PlayerSelectScreen>
       (
         children:
         [
-          const SizedBox(height: 16),
+          const SizedBox(height: 8),
 
-          // ADD PLAYER BUTTON
-          Row
+          Padding
           (
-            mainAxisAlignment: MainAxisAlignment.center,
-            children:
-            [
-              ElevatedButton
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Material
+            (
+              elevation: 3,
+              borderRadius: BorderRadius.circular(30),
+              child: TextField
               (
-                onPressed: selectedPlayers.length >= maxPlayers
-                    ? null
-                    : openPlayerPicker,
-                child: const Text("+"),
+                controller: searchController,
+                onChanged: (value)
+                {
+                  fetchPlayers(query: value);
+                },
+                decoration: const InputDecoration
+                (
+                  hintText: "Search for a Player",
+                  prefixIcon: Icon(Icons.search),
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.symmetric(vertical: 14),
+                  filled: true,
+                  fillColor: Colors.white,
+                ),
               ),
-            ],
+            ),
           ),
 
           const SizedBox(height: 24),
@@ -105,47 +118,37 @@ class _PlayerSelectScreenState extends State<PlayerSelectScreen>
           (
             child: ListView.builder
             (
-              itemCount: selectedPlayers.length,
+              itemCount: players.length,
               itemBuilder: (context, index)
               {
-                final player = selectedPlayers[index];
+                final player = players[index];
+                final isSelected = selectedOpponent?.id == player.id;
 
                 return Padding
                 (
                   padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-                  child: Stack
+                  child: ElevatedButton
                   (
-                    children:
-                    [
-                      ElevatedButton
+                    style: ElevatedButton.styleFrom
+                    (
+                      minimumSize: const Size(double.infinity, 70),
+                      backgroundColor: isSelected ? Colors.green : null,
+                    ),
+                    onPressed: ()
+                    {
+                      setState
                       (
-                        style: ElevatedButton.styleFrom
-                        (
-                          minimumSize: const Size(double.infinity, 70),
-                        ),
-                        onPressed: () {},
-                        child: Text
-                        (
-                          player.username,
-                          style: const TextStyle(fontSize: 18),
-                        ),
-                      ),
-
-                      // REMOVE BUTTON
-                      Positioned
-                      (
-                        right: 8,
-                        top: 8,
-                        child: IconButton
-                        (
-                          icon: const Icon(Icons.remove_circle),
-                          onPressed: ()
-                          {
-                            removePlayerSlot(index);
-                          },
-                        ),
-                      ),
-                    ],
+                        ()
+                        {
+                          selectedOpponent = player;
+                        },
+                      );
+                    },
+                    child: Text
+                    (
+                      player.username,
+                      style: const TextStyle(fontSize: 18),
+                    ),
                   ),
                 );
               },
@@ -156,19 +159,23 @@ class _PlayerSelectScreenState extends State<PlayerSelectScreen>
 
           ElevatedButton
           (
-            onPressed: selectedPlayers.isEmpty
+            onPressed: selectedOpponent == null
                 ? null
                 : () async
                   {
                     final game = await Navigator.push<Game>(
+                      
                       context,
                       MaterialPageRoute(
                         builder: (_) => CategorySelectScreen(
-                          players: List.from(selectedPlayers),
+                          players:
+                          [
+                            selectedOpponent!,
+                          ],
                         ),
                       ),
                     );
-                    
+
                     if (game != null)
                     {
                       Navigator.pop(context, game);

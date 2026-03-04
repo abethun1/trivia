@@ -15,6 +15,7 @@ import 'question_screen.dart';
 
 //Dialogs
 import '../dialogs/dashboard_dailogs.dart';
+import '../dialogs/game_score_dialog.dart';
 
 //Services
 import '../services/question_generator_service.dart';
@@ -39,6 +40,47 @@ class DashboardScreen extends StatefulWidget
 
 class _DashboardScreenState extends State<DashboardScreen> 
 {
+  Map<String, List<Game>> bucketGames(List<Game> games, String userId)
+  {
+    final buckets = <String, List<Game>>
+    {
+      "request": [],
+      "waiting": [],
+      "yourTurn": [],
+      "theirTurn": [],
+      "ended": [],
+    };
+
+    for (final game in games)
+    {
+      final accepted = game.acceptedPlayers[userId] ?? false;
+      final allAccepted = game.acceptedPlayers.values.every((v) => v == true);
+
+      if (game.status == "ended")
+      {
+        buckets["ended"]!.add(game);
+      }
+      else if (!accepted)
+      {
+        buckets["request"]!.add(game);
+      }
+      else if (!allAccepted)
+      {
+        buckets["waiting"]!.add(game);
+      }
+      else if (game.currentTurnPlayerId == userId)
+      {
+        buckets["yourTurn"]!.add(game);
+      }
+      else
+      {
+        buckets["theirTurn"]!.add(game);
+      }
+    }
+
+    return buckets;
+  }
+
 Future<void> onRequestTap(Game game) async
 {
   final client = Supabase.instance.client;
@@ -85,7 +127,6 @@ Future<void> onRequestTap(Game game) async
         "current_turn_player_id": game.creatorId,
       }).eq("id", game.id);
 
-    print("---------------------Invoke here------------------");
     showGameCreatingDialog(context);
 
     await generateRoundQuestions
@@ -95,8 +136,6 @@ Future<void> onRequestTap(Game game) async
     );
 
     Navigator.pop(context);
-    
-    print("---------------------Invoke here------------------");
     }
     else
     {
@@ -129,55 +168,18 @@ Future<void> onRequestTap(Game game) async
     if (game == null) return;
 
     final client = Supabase.instance.client;
-    final userId = client.auth.currentUser!.id;
-
-    final List<String> playerIds = List<String>.from(game.playerIds);
-
-    if (!playerIds.contains(userId)) 
-    {
-      playerIds.add(userId);
-    }
-
-    final acceptedPlayers =
-    {
-      for (var id in playerIds) id : id == userId,
-    };
-
-    final playerCategories =
-    {
-      userId : game.playerCategories[userId]!,
-    };
-
-    final scores =
-    {
-      for (var id in playerIds) id : 0,
-    };
-
-    final newGame = Game
-    (
-      id: '',
-      creatorId: userId,
-      playerIds: playerIds,
-      acceptedPlayers: acceptedPlayers,
-      playerCategories: playerCategories,
-      scores: scores,
-      currentRound: 0,
-      currentTurnPlayerId: userId,
-      status: 'pending',
-      createdAt: DateTime.now(),
-    );
 
     await client
         .from('games')
-        .insert(newGame.toInsertJson());
+        .insert(game.toInsertJson());
 
     setState(() {});
   }
 
 
-  /**
-   * Gets all of the games that the current player is attached to
-   */
+/**
+ * Gets all of the games that the current player is attached to
+ */
 Future<List<Game>> fetchMyGames() async
 {
   final userId = Supabase.instance.client.auth.currentUser!.id;
@@ -190,41 +192,65 @@ Future<List<Game>> fetchMyGames() async
   final games =
       data.map<Game>((row) => Game.fromJson(row)).toList();
 
-  final List<Game> requestGames = [];
-  final List<Game> waitingGames = [];
-  final List<Game> yourTurnGames = [];
-  final List<Game> theirTurnGames = [];
-  final List<Game> endedGames = [];
+  return games;
+}
 
-  for (final game in games)
+Future<void> onEndedGameTap(Game game) async
+{
+  final client = Supabase.instance.client;
+  final userId = client.auth.currentUser!.id;
+
+  final players = List<String>.from(game.playerIds);
+  if (players.isEmpty)
   {
-    final accepted = game.acceptedPlayers[userId] ?? false;
-    final allAccepted =
-        game.acceptedPlayers.values.every((v) => v == true);
+    return;
+  }
 
-    if (game.status == "ended")
+  final profiles = await client
+      .from('user_profiles')
+      .select('id, username')
+      .inFilter('id', players);
+
+  final usernames = <String, String>{};
+  for (final row in profiles)
+  {
+    usernames[row['id'] as String] = row['username'] as String;
+  }
+
+  final opponentId = players.firstWhere(
+    (id) => id != userId,
+    orElse: () => userId,
+  );
+
+  final currentUsername = usernames[userId] ?? widget.userProfile.username;
+  final opponentUsername = usernames[opponentId] ?? 'Opponent';
+
+  final currentScore = game.scores[userId] ?? 0;
+  final opponentScore = game.scores[opponentId] ?? 0;
+
+  var winnerName = "Tie";
+  if (game.scores.isNotEmpty)
+  {
+    final maxScore = game.scores.values.reduce((a, b) => a > b ? a : b);
+    final winnerIds = game.scores.entries
+        .where((entry) => entry.value == maxScore)
+        .map((entry) => entry.key)
+        .toList();
+
+    if (winnerIds.length == 1)
     {
-      endedGames.add(game);
-    }
-    else if (!accepted)
-    {
-      requestGames.add(game);
-    }
-    else if (!allAccepted)
-    {
-      waitingGames.add(game);
-    }
-    else if (game.currentTurnPlayerId == userId)
-    {
-      yourTurnGames.add(game);
-    }
-    else
-    {
-      theirTurnGames.add(game);
+      winnerName = usernames[winnerIds.first] ?? "Unknown";
     }
   }
 
-  return games;
+  await showEndedGameScoreDialog(
+    context: context,
+    winnerName: winnerName,
+    currentUsername: currentUsername,
+    currentScore: currentScore,
+    opponentUsername: opponentUsername,
+    opponentScore: opponentScore,
+  );
 }
   
   Widget buildGameSection(String title, List<String> games)
@@ -321,7 +347,6 @@ Future<List<Game>> fetchMyGames() async
       ],
     );
   }
-  //======================================================
 
   Widget buildYourTurnSection(String title, List<Game> games) {
     if (games.isEmpty) {
@@ -348,14 +373,62 @@ Future<List<Game>> fetchMyGames() async
               return Padding(
                 padding: DashboardStyles.gameCirclePadding,
                 child: GestureDetector(
-                  onTap: () {
-                    Navigator.push(
+                  onTap: () async {
+                    await Navigator.push(
                       context,
                       MaterialPageRoute(
                         builder: (_) => QuestionScreen(game: game),
                       ),
                     );
+                    if (!mounted) return;
+                    setState(() {});
                   },
+                  child: Container(
+                    width: DashboardStyles.gameCircleSize,
+                    height: DashboardStyles.gameCircleSize,
+                    decoration: DashboardStyles.gameCircleDecoration,
+                    alignment: Alignment.center,
+                    child: Text(
+                      game.id.substring(0, 4),
+                      style: DashboardStyles.gameCircleText,
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget buildEndedSection(String title, List<Game> games)
+  {
+    if (games.isEmpty)
+    {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: DashboardStyles.sectionTitle),
+          const SizedBox(height: 8),
+          const Text("No games"),
+        ],
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: DashboardStyles.sectionTitle),
+        const SizedBox(height: 8),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: games.map((game) {
+              return Padding(
+                padding: DashboardStyles.gameCirclePadding,
+                child: GestureDetector(
+                  onTap: () => onEndedGameTap(game),
                   child: Container(
                     width: DashboardStyles.gameCircleSize,
                     height: DashboardStyles.gameCircleSize,
@@ -463,7 +536,7 @@ Future<List<Game>> fetchMyGames() async
 
               const SizedBox(height: 24),
 
-              FutureBuilder
+              FutureBuilder<List<Game>>
               (
                 future: fetchMyGames(),
                 builder: (context, snapshot)
@@ -475,40 +548,12 @@ Future<List<Game>> fetchMyGames() async
 
                   final games = snapshot.data!;
                   final userId = Supabase.instance.client.auth.currentUser!.id;
-
-                  final requestGames = <Game>[];
-                  final waitingGames = <Game>[];
-                  final yourTurnGames = <Game>[];
-                  final theirTurnGames = <Game>[];
-                  final endedGames = <Game>[];
-                  
-                  for (final g in games)
-                  {
-                    final accepted = g.acceptedPlayers[userId] ?? false;
-                    final allAccepted =
-                        g.acceptedPlayers.values.every((v) => v == true);
-                  
-                    if (g.status == "ended")
-                    {
-                      endedGames.add(g);
-                    }
-                    else if (!accepted)
-                    {
-                      requestGames.add(g);
-                    }
-                    else if (!allAccepted)
-                    {
-                      waitingGames.add(g);
-                    }
-                    else if (g.currentTurnPlayerId == userId)
-                    {
-                      yourTurnGames.add(g);
-                    }
-                    else
-                    {
-                      theirTurnGames.add(g);
-                    }
-                  }
+                  final buckets = bucketGames(games, userId);
+                  final requestGames = buckets["request"]!;
+                  final waitingGames = buckets["waiting"]!;
+                  final yourTurnGames = buckets["yourTurn"]!;
+                  final theirTurnGames = buckets["theirTurn"]!;
+                  final endedGames = buckets["ended"]!;
 
                   return Column
                   (
@@ -549,9 +594,9 @@ Future<List<Game>> fetchMyGames() async
 
                       Align(
                         alignment: Alignment.centerLeft,
-                        child: buildGameSection(
+                        child: buildEndedSection(
                           "Ended Games",
-                          endedGames.map((g) => g.id.substring(0, 4)).toList(),
+                          endedGames,
                         ),
                       ),
                     ],
