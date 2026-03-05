@@ -35,7 +35,7 @@ class PlayerSelectStyles
   static const TextStyle playerInputTextStyle =
       TextStyle
       (
-        fontSize: 16,
+        fontSize: 20,
       );
 
   static const InputDecoration playerInputDecoration =
@@ -53,15 +53,6 @@ class PlayerSelectStyles
   static const SizedBox verticalSpacingTiny =
       SizedBox(height: 8);
 
-  static ButtonStyle addRemoveButtonStyle =
-      ElevatedButton.styleFrom
-      (
-        minimumSize: const Size(50, 40),
-        shape: RoundedRectangleBorder
-        (
-          borderRadius: BorderRadius.circular(12),
-        ),
-      );
 
   static ButtonStyle nextButtonStyle =
       ElevatedButton.styleFrom

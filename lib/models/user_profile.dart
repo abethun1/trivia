@@ -9,6 +9,7 @@ class UserProfile
   final String? avatarPendingPath;
   final String avatarStatus;
   final String avatarColorHex;
+  final String statsCardColorHex;
 
   UserProfile
   (
@@ -22,6 +23,7 @@ class UserProfile
       required this.avatarPendingPath,
       required this.avatarStatus,
       required this.avatarColorHex,
+      required this.statsCardColorHex,
     }
   );
 
@@ -38,6 +40,7 @@ class UserProfile
       avatarPendingPath: map['avatar_pending_path'] as String?,
       avatarStatus: (map['avatar_status'] ?? 'approved') as String,
       avatarColorHex: (map['avatar_color_hex'] ?? '#D8B4FE') as String,
+      statsCardColorHex: (map['stats_card_color_hex'] ?? '#7D798A') as String,
     );
   }
 
@@ -51,6 +54,7 @@ class UserProfile
     String? avatarPendingPath,
     String? avatarStatus,
     String? avatarColorHex,
+    String? statsCardColorHex,
   }) {
     return UserProfile(
       id: id ?? this.id,
@@ -62,6 +66,7 @@ class UserProfile
       avatarPendingPath: avatarPendingPath ?? this.avatarPendingPath,
       avatarStatus: avatarStatus ?? this.avatarStatus,
       avatarColorHex: avatarColorHex ?? this.avatarColorHex,
+      statsCardColorHex: statsCardColorHex ?? this.statsCardColorHex,
     );
   }
 }

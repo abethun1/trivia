@@ -4,6 +4,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 //Models
 import '../models/user_profile.dart';
 import '../models/game.dart';
+import '../widgets/app_background.dart';
+import '../widgets/fancy_search_bar.dart';
 
 class CategorySelectScreen extends StatefulWidget
 {
@@ -262,37 +264,26 @@ class _CategorySelectScreenState extends State<CategorySelectScreen>
   {
     return Scaffold
     (
-      appBar: AppBar(title: const Text("Select Categories")),
-      body: Column
-      (
-        children:
-        [
+      extendBodyBehindAppBar: true,
+      body: AppBackground(
+        child: SafeArea(
+          child: Column
+          (
+            children:
+            [
           const SizedBox(height: 8),
 
           Padding
           (
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Material
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 20),
+            child: FancySearchBar
             (
-              elevation: 3,
-              borderRadius: BorderRadius.circular(30),
-              child: TextField
-              (
-                controller: searchController,
-                onChanged: (value)
-                {
-                  fetchCategories(query: value);
-                },
-                decoration: const InputDecoration
-                (
-                  hintText: "Search categories",
-                  prefixIcon: Icon(Icons.search),
-                  border: InputBorder.none,
-                  contentPadding: EdgeInsets.symmetric(vertical: 14),
-                  filled: true,
-                  fillColor: Colors.white,
-                ),
-              ),
+              controller: searchController,
+              hintText: "Search...",
+              onChanged: (value)
+              {
+                fetchCategories(query: value);
+              },
             ),
           ),
 
@@ -301,66 +292,149 @@ class _CategorySelectScreenState extends State<CategorySelectScreen>
           Padding
           (
             padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Column
+            child: Container
             (
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children:
-              [
-                const Text("Selected Categories"),
-                const SizedBox(height: 6),
-                Wrap
-                (
-                  spacing: 8,
-                  children: selected.map((cat)
-                  {
-                    return Chip
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration
+              (
+                color: Colors.white.withValues(alpha: 0.78),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: const Color(0xFFADC7F7), width: 2),
+              ),
+              child: Column
+              (
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children:
+                [
+                  Text("Selected Categories (${selected.length}/5)"),
+                  const SizedBox(height: 8),
+                  if (selected.isEmpty)
+                    const Text("No categories selected"),
+                  if (selected.isNotEmpty)
+                    Wrap
                     (
-                      label: Text(cat),
-                      onDeleted: () => toggle(cat),
-                    );
-                  }).toList(),
-                ),
-              ],
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: selected.map((cat)
+                      {
+                        return ElevatedButton.icon
+                        (
+                          onPressed: () => toggle(cat),
+                          icon: const Icon(Icons.close, size: 16),
+                          label: Text(cat),
+                          style: ElevatedButton.styleFrom
+                          (
+                            minimumSize: const Size(0, 44),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 10,
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                ],
+              ),
             ),
           ),
 
-          const Divider(),
+          const SizedBox(height: 8),
           const Text("Available Categories"),
+          const SizedBox(height: 8),
 
           if (loading)
-            const CircularProgressIndicator(),
-
-          if (!loading)
-            Wrap
+            const Expanded
             (
-              spacing: 8,
-              children: categories.map((cat)
-              {
-                return ChoiceChip
-                (
-                  label: Text(cat),
-                  selected: selected.contains(cat),
-                  onSelected: (_) => toggle(cat),
-                );
-              }).toList(),
+              child: Center(child: CircularProgressIndicator()),
             ),
 
-          const Spacer(),
+          if (!loading)
+            Expanded
+            (
+              child: ListView.separated
+              (
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                itemCount: categories.length,
+                separatorBuilder: (context, index) => const SizedBox(height: 10),
+                itemBuilder: (context, index)
+                {
+                  final cat = categories[index];
+                  final isSelected = selected.contains(cat);
+
+                  return ElevatedButton
+                  (
+                    style: ElevatedButton.styleFrom
+                    (
+                      minimumSize: const Size(double.infinity, 56),
+                      backgroundColor: isSelected
+                          ? const Color(0xFFD6E6FF)
+                          : null,
+                    ),
+                    onPressed: () => toggle(cat),
+                    child: Row
+                    (
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children:
+                      [
+                        Expanded
+                        (
+                          child: Text
+                          (
+                            cat,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        Icon
+                        (
+                          isSelected
+                              ? Icons.check_circle
+                              : Icons.add_circle_outline,
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
 
           Padding
           (
             padding: const EdgeInsets.all(12),
-            child: ElevatedButton
+            child: Row
             (
-              onPressed: selected.length == 5
-                  ? (widget.isJoining
-                        ? showJoinConfirmation
-                        : showHostConfirmation)
-                  : null,
-              child: const Text("Next"),
+              children:
+              [
+                Expanded
+                (
+                  child: ElevatedButton
+                  (
+                    onPressed: ()
+                    {
+                      Navigator.pop(context);
+                    },
+                    child: const Text("Back"),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded
+                (
+                  child: ElevatedButton
+                  (
+                    onPressed: selected.length == 5
+                        ? (widget.isJoining
+                              ? showJoinConfirmation
+                              : showHostConfirmation)
+                        : null,
+                    child: const Text("Next"),
+                  ),
+                ),
+              ],
             ),
           ),
-        ],
+            ],
+          ),
+        ),
       ),
     );
   }

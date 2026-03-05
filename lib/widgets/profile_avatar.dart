@@ -104,17 +104,81 @@ class _ProfileAvatarState extends State<ProfileAvatar> {
     return trimmed[0].toUpperCase();
   }
 
+  Color blendWithWhite(Color color, double amount) {
+    return Color.lerp(color, Colors.white, amount) ?? color;
+  }
+
+  Color blendWithBlack(Color color, double amount) {
+    return Color.lerp(color, Colors.black, amount) ?? color;
+  }
+
+  Widget avatarFrame({required Widget child, required Color accent}) {
+    final outerLight = blendWithWhite(accent, 0.42);
+    final outerDark = blendWithBlack(accent, 0.08);
+
+    return SizedBox(
+      width: widget.radius * 2,
+      height: widget.radius * 2,
+      child: Container(
+        padding: const EdgeInsets.all(3),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              outerLight,
+              accent,
+              outerDark,
+            ],
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: accent.withValues(alpha: 0.38),
+              blurRadius: widget.radius * 0.36,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Container(
+          padding: const EdgeInsets.all(3),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Colors.white.withValues(alpha: 0.92),
+          ),
+          child: Container(
+            padding: const EdgeInsets.all(2),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: blendWithWhite(accent, 0.7),
+            ),
+            child: ClipOval(child: child),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget initialAvatar() {
     final initial = initialFromUsername(widget.username);
-    return CircleAvatar(
-      radius: widget.radius,
-      backgroundColor: parseHexColor(widget.avatarColorHex),
-      child: Text(
-        initial,
-        style: TextStyle(
-          fontSize: widget.radius * 0.8,
-          fontWeight: FontWeight.w700,
-          color: Colors.white,
+    final accent = parseHexColor(widget.avatarColorHex);
+    final fallbackBg = blendWithWhite(accent, 0.62);
+    final textColor = fallbackBg.computeLuminance() > 0.55
+        ? const Color(0xFF2A3650)
+        : Colors.white;
+
+    return avatarFrame(
+      accent: accent,
+      child: Container(
+        color: fallbackBg,
+        alignment: Alignment.center,
+        child: Text(
+          initial,
+          style: TextStyle(
+            fontSize: widget.radius * 0.75,
+            fontWeight: FontWeight.w700,
+            color: textColor,
+          ),
         ),
       ),
     );
@@ -122,14 +186,19 @@ class _ProfileAvatarState extends State<ProfileAvatar> {
 
   @override
   Widget build(BuildContext context) {
+    final accent = parseHexColor(widget.avatarColorHex);
+
     if (loadingUrl) {
-      return CircleAvatar(
-        radius: widget.radius,
-        backgroundColor: parseHexColor(widget.avatarColorHex),
-        child: SizedBox(
-          width: widget.radius * 0.8,
-          height: widget.radius * 0.8,
-          child: const CircularProgressIndicator(strokeWidth: 2),
+      return avatarFrame(
+        accent: accent,
+        child: Container(
+          color: blendWithWhite(accent, 0.62),
+          alignment: Alignment.center,
+          child: SizedBox(
+            width: widget.radius * 0.8,
+            height: widget.radius * 0.8,
+            child: const CircularProgressIndicator(strokeWidth: 2),
+          ),
         ),
       );
     }
@@ -138,17 +207,25 @@ class _ProfileAvatarState extends State<ProfileAvatar> {
       return initialAvatar();
     }
 
-    return CircleAvatar(
-      radius: widget.radius,
-      backgroundColor: parseHexColor(widget.avatarColorHex),
-      backgroundImage: NetworkImage(imageUrl!),
-      onBackgroundImageError: (_, _) {
-        if (!mounted) return;
-        setState(() {
-          imageUrl = null;
-        });
-      },
-      child: const SizedBox.shrink(),
+    return avatarFrame(
+      accent: accent,
+      child: Image.network(
+        imageUrl!,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) {
+          if (mounted) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) return;
+              setState(() {
+                imageUrl = null;
+              });
+            });
+          }
+          return Container(
+            color: blendWithWhite(accent, 0.62),
+          );
+        },
+      ),
     );
   }
 }

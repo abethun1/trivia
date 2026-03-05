@@ -18,18 +18,49 @@ class QuestionStyles {
   );
 
   static final answerButtonStyle = ElevatedButton.styleFrom(
-    backgroundColor: const Color.fromARGB(255, 255, 255, 255),
+    backgroundColor: const Color(0xFFF2F6FF),
+    foregroundColor: const Color(0xFF0E49A8),
+    elevation: 8,
+    shadowColor: const Color(0x663B74D8),
     shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(999),
+      side: const BorderSide(
+        color: Color(0xFFBCD2FF),
+        width: 2,
+      ),
     ),
   );
 
   static const timerTextStyle = TextStyle(
-    fontSize: 16,
-    fontWeight: FontWeight.bold,
+    fontSize: 18,
+    fontWeight: FontWeight.w800,
+    color: Color(0xFF0E49A8),
+    shadows: [
+      Shadow(
+        color: Color.fromARGB(90, 9, 57, 138),
+        offset: Offset(0, 1),
+        blurRadius: 1,
+      ),
+    ],
   );
 
-  static const timerBackgroundColor = Color.fromARGB(255, 253, 252, 252);
+  static const timerBackgroundColor = Color(0xFFDCE8FF);
 
-  static const timerColor = Colors.red;
+  static const timerColor = Color(0xFF0E49A8);
+
+  static final timerContainerDecoration = BoxDecoration(
+    color: const Color(0xFFF2F6FF),
+    borderRadius: BorderRadius.circular(999),
+    border: Border.all(
+      color: const Color(0xFFBCD2FF),
+      width: 2,
+    ),
+    boxShadow: const [
+      BoxShadow(
+        color: Color(0x663B74D8),
+        blurRadius: 10,
+        offset: Offset(0, 4),
+      ),
+    ],
+  );
 }

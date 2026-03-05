@@ -6,8 +6,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../constants/storage_buckets.dart';
 import '../main.dart';
 import '../models/user_profile.dart';
+import '../widgets/app_background.dart';
 import '../widgets/profile_avatar.dart';
 import 'avatar_color_screen.dart';
+import 'stats_card_color_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   final UserProfile userProfile;
@@ -25,6 +27,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late UserProfile profile;
   bool avatarBusy = false;
   bool displayNameBusy = false;
+  bool statsCardBusy = false;
 
   @override
   void initState() {
@@ -252,6 +255,52 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> handleChangeStatsCardColor() async {
+    final selectedHex = await Navigator.push<String>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => StatsCardColorScreen(
+          initialColorHex: profile.statsCardColorHex,
+        ),
+      ),
+    );
+
+    if (selectedHex == null || selectedHex == profile.statsCardColorHex) {
+      return;
+    }
+
+    setState(() {
+      statsCardBusy = true;
+    });
+
+    final updatedProfile = profile.copyWith(statsCardColorHex: selectedHex);
+    setState(() {
+      profile = updatedProfile;
+    });
+
+    try {
+      final client = Supabase.instance.client;
+      await client.from('user_profiles').update({
+        'stats_card_color_hex': selectedHex,
+      }).eq('id', profile.id);
+
+      if (!mounted) return;
+      setState(() {
+        statsCardBusy = false;
+      });
+
+      Navigator.pop(context, updatedProfile);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        statsCardBusy = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Stats card color update failed: $e")),
+      );
+    }
+  }
+
   String extensionFromName(String name) {
     final dot = name.lastIndexOf('.');
     if (dot == -1 || dot == name.length - 1) {
@@ -355,10 +404,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Settings")),
-      body: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
+      extendBodyBehindAppBar: true,
+      appBar: AppBar(
+        title: const Text("Settings"),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+      ),
+      body: AppBackground(
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
           children: [
             ProfileAvatar(
               username: profile.username,
@@ -381,12 +438,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
               text: avatarBusy ? "Updating Avatar..." : "Change Avatar Pic",
               onPressed: avatarBusy ? null : showAvatarChoiceDialog,
             ),
+            buildButton(
+              text: statsCardBusy
+                  ? "Updating Stats Card..."
+                  : "Change Stats Card Color",
+              onPressed: statsCardBusy ? null : handleChangeStatsCardColor,
+            ),
             const Spacer(),
             buildButton(
               text: "Sign Out",
               onPressed: () => signOut(context),
             ),
           ],
+            ),
+          ),
         ),
       ),
     );

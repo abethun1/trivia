@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/user_profile.dart';
+import '../widgets/fancy_search_bar.dart';
 
 class PlayerSearchDialog extends StatefulWidget
 {
@@ -110,6 +111,11 @@ class _PlayerSearchDialogState extends State<PlayerSearchDialog>
         )
         .toList();
 
+    if (!mounted)
+    {
+      return;
+    }
+
     if (users.isEmpty)
     {
       setState
@@ -157,17 +163,14 @@ class _PlayerSearchDialogState extends State<PlayerSearchDialog>
           mainAxisSize: MainAxisSize.min,
           children:
           [
-            TextField
+            FancySearchBar
             (
               controller: controller,
+              hintText: "Search...",
               onChanged: (value)
               {
                 searchUsers(value);
               },
-              decoration: const InputDecoration
-              (
-                labelText: "Username",
-              ),
             ),
 
             const SizedBox(height: 12),

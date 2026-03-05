@@ -6,11 +6,8 @@ import '../models/game.dart';
 //Screen
 import 'category_select_screen.dart';
 
-//Style
-import '../styles/player_select_styles.dart';
-
-//Dialogs
-import '../dialogs/player_search_dialog.dart';
+import '../widgets/app_background.dart';
+import '../widgets/fancy_search_bar.dart';
 
 class PlayerSelectScreen extends StatefulWidget
 {
@@ -25,8 +22,6 @@ class PlayerSelectScreen extends StatefulWidget
 
 class _PlayerSelectScreenState extends State<PlayerSelectScreen>
 {
-  static const int maxPlayers = 1;
-
   final supabase = Supabase.instance.client;
   final TextEditingController searchController = TextEditingController();
   bool loading = false;
@@ -57,7 +52,7 @@ class _PlayerSelectScreenState extends State<PlayerSelectScreen>
         .select('id, username, rank, top_category, correct_answers')
         .neq('id', supabase.auth.currentUser!.id)
         .ilike('username', '%$query%')
-        .limit(6);
+        .limit(9);
 
     data.shuffle();
     
@@ -77,39 +72,28 @@ class _PlayerSelectScreenState extends State<PlayerSelectScreen>
   {
     return Scaffold
     (
-      appBar: AppBar(title: const Text("Select Players")),
-      body: Column
-      (
-        children:
-        [
-          const SizedBox(height: 8),
-
-          Padding
+      extendBodyBehindAppBar: true,
+      body: AppBackground(
+        child: SafeArea(
+          child: Column
           (
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Material
+            children:
+            [
+            const SizedBox(height: 8),
+
+            Padding
             (
-              elevation: 3,
-              borderRadius: BorderRadius.circular(30),
-              child: TextField
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 20),
+              child: FancySearchBar
               (
                 controller: searchController,
+                hintText: "Search...",
                 onChanged: (value)
                 {
                   fetchPlayers(query: value);
                 },
-                decoration: const InputDecoration
-                (
-                  hintText: "Search for a Player",
-                  prefixIcon: Icon(Icons.search),
-                  border: InputBorder.none,
-                  contentPadding: EdgeInsets.symmetric(vertical: 14),
-                  filled: true,
-                  fillColor: Colors.white,
-                ),
               ),
             ),
-          ),
 
           const SizedBox(height: 24),
 
@@ -147,7 +131,7 @@ class _PlayerSelectScreenState extends State<PlayerSelectScreen>
                     child: Text
                     (
                       player.username,
-                      style: const TextStyle(fontSize: 18),
+                      style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w100),
                     ),
                   ),
                 );
@@ -157,35 +141,63 @@ class _PlayerSelectScreenState extends State<PlayerSelectScreen>
 
           const SizedBox(height: 16),
 
-          ElevatedButton
+          Padding
           (
-            onPressed: selectedOpponent == null
-                ? null
-                : () async
-                  {
-                    final game = await Navigator.push<Game>(
-                      
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => CategorySelectScreen(
-                          players:
-                          [
-                            selectedOpponent!,
-                          ],
-                        ),
-                      ),
-                    );
-
-                    if (game != null)
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row
+            (
+              children:
+              [
+                Expanded
+                (
+                  child: ElevatedButton
+                  (
+                    onPressed: ()
                     {
-                      Navigator.pop(context, game);
-                    }
-                  },
-            child: const Text("Next"),
+                      Navigator.pop(context);
+                    },
+                    child: const Text("Back"),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded
+                (
+                  child: ElevatedButton
+                  (
+                    onPressed: selectedOpponent == null
+                        ? null
+                        : () async
+                          {
+                            final game = await Navigator.push<Game>(
+                              
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => CategorySelectScreen(
+                                  players:
+                                  [
+                                    selectedOpponent!,
+                                  ],
+                                ),
+                              ),
+                            );
+
+                            if (game != null)
+                            {
+                              if (!context.mounted) return;
+                              Navigator.pop(context, game);
+                            }
+                          },
+                    child: const Text("Next"),
+                  ),
+                ),
+              ],
+            ),
           ),
           
           const SizedBox(height: 16),
-        ],
+            ],
+          ),
+        ),
       ),
     );
   }

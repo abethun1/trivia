@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/app_background.dart';
 import '../widgets/profile_avatar.dart';
 
 class AvatarColorScreen extends StatefulWidget {
@@ -84,10 +85,18 @@ class _AvatarColorScreenState extends State<AvatarColorScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Pick Avatar Color")),
-      body: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
+      extendBodyBehindAppBar: true,
+      appBar: AppBar(
+        title: const Text("Pick Avatar Color"),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+      ),
+      body: AppBackground(
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
           children: [
             ProfileAvatar(
               username: widget.username,
@@ -139,6 +148,8 @@ class _AvatarColorScreenState extends State<AvatarColorScreen> {
               ),
             ),
           ],
+            ),
+          ),
         ),
       ),
     );

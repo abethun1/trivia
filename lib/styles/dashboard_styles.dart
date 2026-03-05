@@ -7,13 +7,13 @@ class DashboardStyles {
 
   // TEXT STYLES
   static const TextStyle statsText = TextStyle(
-    fontSize: 16,
-    fontWeight: FontWeight.w500,
+    fontSize: 20,
+    fontWeight: FontWeight.w900,
   );
 
   static const TextStyle sectionTitle = TextStyle(
     fontSize: 20,
-    fontWeight: FontWeight.bold,
+    fontWeight: FontWeight.w900,
   );
 
   static const TextStyle gameCircleText = TextStyle(

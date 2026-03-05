@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'dashboard_screen.dart';
 import '../models/user_profile.dart';
+import '../widgets/app_background.dart';
 
 class LoadingScreen extends StatefulWidget
 {
@@ -65,17 +66,19 @@ class _LoadingScreenState extends State<LoadingScreen>
   {
     return Scaffold
     (
-      body: Center
-      (
-        child: Column
+      body: AppBackground(
+        child: Center
         (
-          mainAxisAlignment: MainAxisAlignment.center,
-          children:
-          [
-            const CircularProgressIndicator(),
-            const SizedBox(height: 16),
-            const Text("Loading your profile..."),
-          ],
+          child: Column
+          (
+            mainAxisAlignment: MainAxisAlignment.center,
+            children:
+            [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 16),
+              const Text("Loading your profile..."),
+            ],
+          ),
         ),
       ),
     );

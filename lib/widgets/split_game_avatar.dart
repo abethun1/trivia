@@ -87,78 +87,136 @@ class _SplitGameAvatarState extends State<SplitGameAvatar> {
     return trimmed[0].toUpperCase();
   }
 
+  Color blendWithWhite(Color color, double amount) {
+    return Color.lerp(color, Colors.white, amount) ?? color;
+  }
+
+  Color blendWithBlack(Color color, double amount) {
+    return Color.lerp(color, Colors.black, amount) ?? color;
+  }
+
+  Color average(Color a, Color b) {
+    return Color.fromARGB(
+      255,
+      ((a.r + b.r) / 2).round(),
+      ((a.g + b.g) / 2).round(),
+      ((a.b + b.b) / 2).round(),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final leftColor = parseHexColor(widget.topLeftPlayer.avatarColorHex);
     final rightColor = parseHexColor(widget.bottomRightPlayer.avatarColorHex);
+    final accent = average(leftColor, rightColor);
     final leftInitial = initial(widget.topLeftPlayer.username);
     final rightInitial = initial(widget.bottomRightPlayer.username);
 
     return SizedBox(
       width: widget.size,
       height: widget.size,
-      child: Stack(
-        children: [
-          ClipOval(
+      child: Container(
+        padding: const EdgeInsets.all(3),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: SweepGradient(
+            colors: [
+              blendWithWhite(leftColor, 0.42),
+              leftColor,
+              blendWithWhite(rightColor, 0.42),
+              rightColor,
+              blendWithWhite(leftColor, 0.42),
+            ],
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: accent.withValues(alpha: 0.4),
+              blurRadius: widget.size * 0.22,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Container(
+          padding: const EdgeInsets.all(3),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Colors.white.withValues(alpha: 0.92),
+          ),
+          child: Container(
+            padding: const EdgeInsets.all(2),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: blendWithWhite(accent, 0.7),
+            ),
             child: Stack(
               children: [
-                Positioned.fill(
-                  child: ClipPath(
-                    clipper: _TopLeftHalfClipper(),
-                    child: topLeftUrl != null
-                        ? Image.network(
-                            topLeftUrl!,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, _, _) => Container(color: leftColor),
-                          )
-                        : Container(color: leftColor),
+                ClipOval(
+                  child: Stack(
+                    children: [
+                      Positioned.fill(
+                        child: ClipPath(
+                          clipper: _TopLeftHalfClipper(),
+                          child: topLeftUrl != null
+                              ? Image.network(
+                                  topLeftUrl!,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, _, _) => Container(
+                                    color: blendWithWhite(leftColor, 0.62),
+                                  ),
+                                )
+                              : Container(color: blendWithWhite(leftColor, 0.62)),
+                        ),
+                      ),
+                      Positioned.fill(
+                        child: ClipPath(
+                          clipper: _BottomRightHalfClipper(),
+                          child: bottomRightUrl != null
+                              ? Image.network(
+                                  bottomRightUrl!,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, _, _) => Container(
+                                    color: blendWithWhite(rightColor, 0.62),
+                                  ),
+                                )
+                              : Container(color: blendWithWhite(rightColor, 0.62)),
+                        ),
+                      ),
+                      if (topLeftUrl == null)
+                        Align(
+                          alignment: const Alignment(-0.35, -0.35),
+                          child: Text(
+                            leftInitial,
+                            style: TextStyle(
+                              fontSize: widget.size * 0.42,
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFF2A3650),
+                            ),
+                          ),
+                        ),
+                      if (bottomRightUrl == null)
+                        Align(
+                          alignment: const Alignment(0.35, 0.35),
+                          child: Text(
+                            rightInitial,
+                            style: TextStyle(
+                              fontSize: widget.size * 0.42,
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFF2A3650),
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
                 Positioned.fill(
-                  child: ClipPath(
-                    clipper: _BottomRightHalfClipper(),
-                    child: bottomRightUrl != null
-                        ? Image.network(
-                            bottomRightUrl!,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, _, _) => Container(color: rightColor),
-                          )
-                        : Container(color: rightColor),
+                  child: CustomPaint(
+                    painter: _SplitDiagonalPainter(),
                   ),
                 ),
-                if (topLeftUrl == null)
-                  Align(
-                    alignment: const Alignment(-0.35, -0.35),
-                    child: Text(
-                      leftInitial,
-                      style: TextStyle(
-                        fontSize: widget.size * 0.42,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.black87,
-                      ),
-                    ),
-                  ),
-                if (bottomRightUrl == null)
-                  Align(
-                    alignment: const Alignment(0.35, 0.35),
-                    child: Text(
-                      rightInitial,
-                      style: TextStyle(
-                        fontSize: widget.size * 0.42,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.black87,
-                      ),
-                    ),
-                  ),
               ],
             ),
           ),
-          Positioned.fill(
-            child: CustomPaint(
-              painter: _SplitOutlinePainter(),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -192,35 +250,26 @@ class _BottomRightHalfClipper extends CustomClipper<Path> {
   bool shouldReclip(covariant CustomClipper<Path> oldClipper) => false;
 }
 
-class _SplitOutlinePainter extends CustomPainter {
+class _SplitDiagonalPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final radius = size.width / 2 - 0.8;
-    final circleRect = Rect.fromCircle(center: center, radius: radius);
-
-    final circlePath = Path()..addOval(circleRect);
-
-    final borderPaint = Paint()
-      ..color = Colors.black54
-      ..strokeWidth = 1
-      ..style = PaintingStyle.stroke;
-
     final linePaint = Paint()
-      ..color = Colors.black45
-      ..strokeWidth = 1
+      ..color = const Color(0xFF5F7FB8).withValues(alpha: 0.7)
+      ..strokeWidth = 1.4
       ..style = PaintingStyle.stroke;
+
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width / 2;
+    final clipPath = Path()..addOval(Rect.fromCircle(center: center, radius: radius));
 
     canvas.save();
-    canvas.clipPath(circlePath);
+    canvas.clipPath(clipPath);
     canvas.drawLine(
       Offset(0, size.height),
       Offset(size.width, 0),
       linePaint,
     );
     canvas.restore();
-
-    canvas.drawOval(circleRect, borderPaint);
   }
 
   @override

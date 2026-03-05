@@ -18,6 +18,7 @@ import '../dialogs/dashboard_dailogs.dart';
 import '../dialogs/game_score_dialog.dart';
 import '../widgets/profile_avatar.dart';
 import '../widgets/split_game_avatar.dart';
+import '../widgets/app_background.dart';
 
 //Services
 import '../services/question_generator_service.dart';
@@ -42,6 +43,61 @@ class DashboardScreen extends StatefulWidget
 
 class _DashboardScreenState extends State<DashboardScreen> 
 {
+  Color parseHexColor(String hex, {Color fallback = const Color(0xFF7D798A)})
+  {
+    final clean = hex.replaceAll('#', '').trim();
+    if (clean.length != 6) return fallback;
+    final value = int.tryParse(clean, radix: 16);
+    if (value == null) return fallback;
+    return Color(0xFF000000 | value);
+  }
+
+  Color blendWithWhite(Color color, double amount)
+  {
+    return Color.lerp(color, Colors.white, amount) ?? color;
+  }
+
+  Color blendWithBlack(Color color, double amount)
+  {
+    return Color.lerp(color, Colors.black, amount) ?? color;
+  }
+
+  BoxDecoration statsCardDecorationForProfile()
+  {
+    final base = parseHexColor(profile.statsCardColorHex);
+    final top = blendWithWhite(base, 0.32);
+    final bottom = blendWithBlack(base, 0.08);
+
+    return BoxDecoration(
+      gradient: LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          top,
+          base,
+          bottom,
+        ],
+      ),
+      borderRadius: BorderRadius.circular(26),
+      border: Border.all(
+        color: blendWithWhite(base, 0.55),
+        width: 2,
+      ),
+      boxShadow: [
+        BoxShadow(
+          color: blendWithBlack(base, 0.45).withValues(alpha: 0.35),
+          blurRadius: 14,
+          offset: const Offset(0, 6),
+        ),
+        BoxShadow(
+          color: blendWithWhite(base, 0.6).withValues(alpha: 0.35),
+          blurRadius: 8,
+          offset: const Offset(0, -2),
+        ),
+      ],
+    );
+  }
+
   UserProfile fallbackProfile(String id)
   {
     return UserProfile.fromMap(
@@ -180,7 +236,41 @@ Future<void> onRequestTap(Game game) async
     gameId: game.id,
   );
 
-  if (result != null)
+  if (result == null)
+  {
+    return;
+  }
+
+  if (result.action == InviteAction.rejectGame)
+  {
+    try
+    {
+      await client
+          .from('games')
+          .delete()
+          .eq('id', game.id);
+
+      if (!mounted) return;
+      setState(() {});
+    }
+    catch (e)
+    {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar
+      (
+        SnackBar(content: Text("Failed to reject game: $e")),
+      );
+    }
+    return;
+  }
+
+  final selectedCategories = result.categories;
+  if (selectedCategories == null)
+  {
+    return;
+  }
+
+  if (selectedCategories.isNotEmpty)
   {
     final userId = client.auth.currentUser!.id;
 
@@ -191,7 +281,7 @@ Future<void> onRequestTap(Game game) async
         Map<String, List<String>>.from(game.playerCategories);
 
     updatedAccepted[userId] = true;
-    updatedCategories[userId] = result;
+    updatedCategories[userId] = selectedCategories;
 
     final allAccepted =
         updatedAccepted.values.every((v) => v == true);
@@ -295,7 +385,7 @@ Future<Map<String, UserProfile>> fetchProfilesForGames(List<Game> games) async
 
   final rows = await Supabase.instance.client
       .from('user_profiles')
-      .select('id, username, rank, top_category, correct_answers, avatar_path, avatar_pending_path, avatar_status, avatar_color_hex')
+      .select('id, username, rank, top_category, correct_answers, avatar_path, avatar_pending_path, avatar_status, avatar_color_hex, stats_card_color_hex')
       .inFilter('id', ids.toList());
 
   final map = <String, UserProfile>{};
@@ -545,22 +635,25 @@ Future<void> onEndedGameTap(Game game) async
     final size = MediaQuery.of(context).size;
 
     return Scaffold(
-      appBar: AppBar(title: Text("${profile.username} Dashboard")),
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
+      extendBodyBehindAppBar: true,
+
+      body: AppBackground(
+        child: SafeArea(
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
             children:
             [
               // TOP ROW
               Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children:
                 [
                   Expanded(
                     child: Container(
                       padding: const EdgeInsets.all(20),
-                      decoration: DashboardStyles.statsCardDecoration,
+                      decoration: statsCardDecorationForProfile(),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children:
@@ -599,30 +692,34 @@ Future<void> onEndedGameTap(Game game) async
                         await refreshUserProfile();
                       }
                     },
-                    child: Column
-                    (
-                      children: 
-                      [
-                        ProfileAvatar
-                        (
-                          username: profile.username,
-                          avatarPath: profile.avatarPath,
-                          avatarStatus: profile.avatarStatus,
-                          avatarColorHex: profile.avatarColorHex,
-                          radius: 38,
-                        ),
-
-                        const SizedBox(height: 6),
-                        Text
-                        (
-                          profile.username,
-                          style: const TextStyle
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: Column
+                      (
+                        mainAxisSize: MainAxisSize.min,
+                        children: 
+                        [
+                          ProfileAvatar
                           (
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                          )
-                        ),
-                      ]
+                            username: profile.username,
+                            avatarPath: profile.avatarPath,
+                            avatarStatus: profile.avatarStatus,
+                            avatarColorHex: profile.avatarColorHex,
+                            radius: 46,
+                          ),
+
+                          const SizedBox(height: 6),
+                          Text
+                          (
+                            profile.username,
+                            style: const TextStyle
+                            (
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                            )
+                          ),
+                        ]
+                      ),
                     )
 
                   ),
@@ -638,7 +735,7 @@ Future<void> onEndedGameTap(Game game) async
                 child: ElevatedButton(
                   onPressed: () => startNewGame(context),
                   style: DashboardStyles.startGameButtonStyle,
-                  child: const Text("Start New Game", style: TextStyle(fontSize: 20)),
+                  child: const Text("Start New Game", style: TextStyle(fontSize: 25, fontWeight: FontWeight.w100)),
                 ),
               ),
 
@@ -733,6 +830,8 @@ Future<void> onEndedGameTap(Game game) async
                 },
               ),
             ],
+              ),
+            ),
           ),
         ),
       ),

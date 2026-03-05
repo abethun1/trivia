@@ -7,6 +7,7 @@ import '../models/game.dart';
 import '../services/question_generator_service.dart';
 import '../styles/question_style.dart';
 import '../utils/html_entity_decoder.dart';
+import '../widgets/app_background.dart';
 
 class QuestionScreen extends StatefulWidget {
   final Game game;
@@ -18,8 +19,8 @@ class QuestionScreen extends StatefulWidget {
 }
 
 class _QuestionScreenState extends State<QuestionScreen> {
-  static const int normalQuestionTime = 10;
-  static const int finalQuestionTime = 20;
+  static const int normalQuestionTime = 15;
+  static const int finalQuestionTime = 25;
 
   final supabase = Supabase.instance.client;
   final TextEditingController betController = TextEditingController();
@@ -36,6 +37,9 @@ class _QuestionScreenState extends State<QuestionScreen> {
   bool revealAnswers = false;
   bool advanceScheduled = false;
   bool finalRoundStarted = false;
+  bool turnUpdateInProgress = false;
+  bool turnFinalized = false;
+  bool abandonInProgress = false;
 
   String? selectedAnswer;
   String? betErrorText;
@@ -49,16 +53,28 @@ class _QuestionScreenState extends State<QuestionScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(_lifecycleObserver);
     loadQuestions();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(_lifecycleObserver);
     timer?.cancel();
     betController.dispose();
     finalAnswerController.dispose();
     super.dispose();
   }
+
+  late final WidgetsBindingObserver _lifecycleObserver = _QuestionLifecycleObserver(
+    onStateChanged: (state) {
+      if (state == AppLifecycleState.inactive ||
+          state == AppLifecycleState.paused ||
+          state == AppLifecycleState.detached) {
+        unawaited(forfeitTurnIfAbandoned());
+      }
+    },
+  );
 
   Future<void> loadQuestions() async {
     final questionCount = isFinalRound ? 1 : 5;
@@ -266,8 +282,32 @@ class _QuestionScreenState extends State<QuestionScreen> {
       scoreLabel: isFinalRound ? "Final Score" : "Score",
     );
 
+    turnFinalized = true;
     if (!mounted) return;
     Navigator.pop(context);
+  }
+
+  Future<void> forfeitTurnIfAbandoned() async {
+    if (turnFinalized || turnUpdateInProgress || abandonInProgress) {
+      return;
+    }
+
+    final currentUser = supabase.auth.currentUser;
+    if (currentUser == null) {
+      return;
+    }
+
+    abandonInProgress = true;
+    timer?.cancel();
+
+    try {
+      await endTurn(0, 0);
+      turnFinalized = true;
+    } catch (_) {
+      // Ignore failures here; user is leaving and we only need best-effort forfeit.
+    } finally {
+      abandonInProgress = false;
+    }
   }
 
   Color getAnswerBackground(String answerText) {
@@ -314,58 +354,65 @@ class _QuestionScreenState extends State<QuestionScreen> {
   }
 
   Future<void> endTurn(int earnedScore, int correctAnswersCount) async {
-    final userId = supabase.auth.currentUser!.id;
-    final updatedScores = Map<String, int>.from(widget.game.scores);
+    if (turnFinalized || turnUpdateInProgress) return;
+    turnUpdateInProgress = true;
+    try {
+      final userId = supabase.auth.currentUser!.id;
+      final updatedScores = Map<String, int>.from(widget.game.scores);
 
-    final currentScore = updatedScores[userId] ?? 0;
-    updatedScores[userId] = currentScore + earnedScore;
+      final currentScore = updatedScores[userId] ?? 0;
+      updatedScores[userId] = currentScore + earnedScore;
 
-    final players = widget.game.playerIds;
-    final currentIndex = players.indexOf(userId);
+      final players = widget.game.playerIds;
+      final currentIndex = players.indexOf(userId);
 
-    if (players.isEmpty) return;
+      if (players.isEmpty) return;
 
-    if (currentIndex == -1) {
-      await supabase.from('games').update({
-        'scores': updatedScores,
-        'current_turn_player_id': players.first,
-      }).eq('id', widget.game.id);
-    } else {
-      final isLastPlayerInRound = currentIndex == players.length - 1;
-
-      if (!isLastPlayerInRound) {
-        final nextPlayerId = players[currentIndex + 1];
+      if (currentIndex == -1) {
         await supabase.from('games').update({
           'scores': updatedScores,
-          'current_turn_player_id': nextPlayerId,
+          'current_turn_player_id': players.first,
         }).eq('id', widget.game.id);
       } else {
-        final currentRound = widget.game.currentRound;
+        final isLastPlayerInRound = currentIndex == players.length - 1;
 
-        if (currentRound >= finalRoundNumber) {
+        if (!isLastPlayerInRound) {
+          final nextPlayerId = players[currentIndex + 1];
           await supabase.from('games').update({
             'scores': updatedScores,
-            'status': 'ended',
-            'current_turn_player_id': players.first,
+            'current_turn_player_id': nextPlayerId,
           }).eq('id', widget.game.id);
         } else {
-          final nextRound = currentRound + 1;
+          final currentRound = widget.game.currentRound;
 
-          await supabase.from('games').update({
-            'scores': updatedScores,
-            'current_round': nextRound,
-            'current_turn_player_id': players.first,
-          }).eq('id', widget.game.id);
+          if (currentRound >= finalRoundNumber) {
+            await supabase.from('games').update({
+              'scores': updatedScores,
+              'status': 'ended',
+              'current_turn_player_id': players.first,
+            }).eq('id', widget.game.id);
+          } else {
+            final nextRound = currentRound + 1;
 
-          await generateRoundQuestions(
-            gameId: widget.game.id,
-            round: nextRound,
-          );
+            await supabase.from('games').update({
+              'scores': updatedScores,
+              'current_round': nextRound,
+              'current_turn_player_id': players.first,
+            }).eq('id', widget.game.id);
+
+            await generateRoundQuestions(
+              gameId: widget.game.id,
+              round: nextRound,
+            );
+          }
         }
       }
-    }
 
-    await incrementCorrectAnswers(userId, correctAnswersCount);
+      await incrementCorrectAnswers(userId, correctAnswersCount);
+      turnFinalized = true;
+    } finally {
+      turnUpdateInProgress = false;
+    }
   }
 
   int currentPlayerTotalScore() {
@@ -411,11 +458,11 @@ class _QuestionScreenState extends State<QuestionScreen> {
     final totalScore = currentPlayerTotalScore();
 
     return Scaffold(
-      backgroundColor: QuestionStyles.backgroundColor,
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
+      body: AppBackground(
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -478,6 +525,7 @@ class _QuestionScreenState extends State<QuestionScreen> {
                 child: const Text("Go To Question"),
               ),
             ],
+            ),
           ),
         ),
       ),
@@ -564,16 +612,43 @@ class _QuestionScreenState extends State<QuestionScreen> {
   @override
   Widget build(BuildContext context) {
     if (loadingQuestions) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
+      return PopScope(
+        canPop: true,
+        onPopInvokedWithResult: (didPop, result) {
+          if (didPop) {
+            unawaited(forfeitTurnIfAbandoned());
+          }
+        },
+        child: Scaffold(
+          body: AppBackground(
+            child: const Center(child: CircularProgressIndicator()),
+          ),
+        ),
       );
     }
 
     if (questions.isEmpty) {
-      return Scaffold(
-        appBar: AppBar(),
-        body: const Center(
-          child: Text("No questions found for this round."),
+      return PopScope(
+        canPop: true,
+        onPopInvokedWithResult: (didPop, result) {
+          if (didPop) {
+            unawaited(forfeitTurnIfAbandoned());
+          }
+        },
+        child: Scaffold(
+          extendBodyBehindAppBar: true,
+          appBar: AppBar(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            scrolledUnderElevation: 0,
+          ),
+          body: AppBackground(
+            child: const SafeArea(
+              child: Center(
+                child: Text("No questions found for this round."),
+              ),
+            ),
+          ),
         ),
       );
     }
@@ -586,74 +661,104 @@ class _QuestionScreenState extends State<QuestionScreen> {
 
     final progress = timeLeft / timerDuration;
 
-    return Scaffold(
-      backgroundColor: QuestionStyles.backgroundColor,
-      body: SafeArea(
-        child: Stack(
-          children: [
-            Column(
-              children: [
-                const SizedBox(height: 100),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Card(
-                    elevation: 6,
-                    shape: QuestionStyles.questionCardShape,
-                    child: Container(
-                      height: MediaQuery.of(context).size.height * 0.20,
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(20),
-                      alignment: Alignment.center,
-                      child: Text(
-                        q['question'],
-                        textAlign: TextAlign.center,
-                        style: QuestionStyles.questionTextStyle,
+    return PopScope(
+      canPop: true,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) {
+          unawaited(forfeitTurnIfAbandoned());
+        }
+      },
+      child: Scaffold(
+        body: AppBackground(
+          child: SafeArea(
+            child: Stack(
+            children: [
+              Column(
+                children: [
+                  const SizedBox(height: 100),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Card(
+                      elevation: 6,
+                      shape: QuestionStyles.questionCardShape,
+                      child: Container(
+                        height: MediaQuery.of(context).size.height * 0.20,
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(20),
+                        alignment: Alignment.center,
+                        child: Text(
+                          q['question'],
+                          textAlign: TextAlign.center,
+                          style: QuestionStyles.questionTextStyle,
+                        ),
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 40),
-                if (!isFinalRound)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: Column(
-                      children: currentAnswers.map((a) {
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: buildAnswerButton(a),
-                        );
-                      }).toList(),
+                  const SizedBox(height: 40),
+                  if (!isFinalRound)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: Column(
+                        children: currentAnswers.map((a) {
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: buildAnswerButton(a),
+                          );
+                        }).toList(),
+                      ),
                     ),
-                  ),
-                if (isFinalRound) buildFinalAnswerSection(q),
-              ],
-            ),
-            Positioned(
-              top: 10,
-              right: 10,
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  SizedBox(
-                    width: 55,
-                    height: 55,
-                    child: CircularProgressIndicator(
-                      value: progress,
-                      strokeWidth: 6,
-                      backgroundColor: QuestionStyles.timerBackgroundColor,
-                      color: QuestionStyles.timerColor,
-                    ),
-                  ),
-                  Text(
-                    "$timeLeft",
-                    style: QuestionStyles.timerTextStyle,
-                  )
+                  if (isFinalRound) buildFinalAnswerSection(q),
                 ],
               ),
+              Positioned(
+                top: 10,
+                right: 10,
+                child: Container(
+                  height: 64,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: QuestionStyles.timerContainerDecoration,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          SizedBox(
+                            width: 42,
+                            height: 42,
+                            child: CircularProgressIndicator(
+                              value: progress,
+                              strokeWidth: 5,
+                              backgroundColor: QuestionStyles.timerBackgroundColor,
+                              color: QuestionStyles.timerColor,
+                            ),
+                          ),
+                          Text(
+                            "$timeLeft",
+                            style: QuestionStyles.timerTextStyle.copyWith(fontSize: 14),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
             ),
-          ],
+          ),
         ),
       ),
     );
+  }
+}
+
+class _QuestionLifecycleObserver extends WidgetsBindingObserver {
+  final void Function(AppLifecycleState state) onStateChanged;
+
+  _QuestionLifecycleObserver({required this.onStateChanged});
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    onStateChanged(state);
   }
 }

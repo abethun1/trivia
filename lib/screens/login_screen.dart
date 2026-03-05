@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'loading_screen.dart';
@@ -15,7 +16,8 @@ class LoginScreen extends StatefulWidget
   }
 }
 
-class _LoginScreenState extends State<LoginScreen> 
+class _LoginScreenState extends State<LoginScreen>
+    with SingleTickerProviderStateMixin
 {
   final supabase = Supabase.instance.client;
 
@@ -26,6 +28,8 @@ class _LoginScreenState extends State<LoginScreen>
   bool isLogin = true;
   bool loading = false;
   String? formMessage;
+  late final AnimationController _pulseController;
+  late final Animation<double> _pulseScale;
 
   Future<bool> usernameTaken(String username) async
   {
@@ -86,11 +90,29 @@ class _LoginScreenState extends State<LoginScreen>
     emailController.addListener(() => setState(() {}));
     passwordController.addListener(() => setState(() {}));
     usernameController.addListener(() => setState(() {}));
+
+    _pulseController = AnimationController
+    (
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    );
+
+    _pulseScale = Tween<double>(begin: 0.90, end: 1.2).animate
+    (
+      CurvedAnimation
+      (
+        parent: _pulseController,
+        curve: Curves.easeInOut,
+      ),
+    );
+
+    _pulseController.repeat(reverse: true);
   }
 
   @override
   void dispose()
   {
+    _pulseController.dispose();
     emailController.dispose();
     passwordController.dispose();
     usernameController.dispose();
@@ -233,30 +255,63 @@ class _LoginScreenState extends State<LoginScreen>
   {
     return Scaffold
     (
-      body: Center
-      (
-        child: SingleChildScrollView
-        (
-          child: Padding
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: Image.asset(
+              "assets/images/title_screen_background.png",
+              fit: BoxFit.cover,
+              alignment: Alignment.topCenter,
+            ),
+          ),
+          Center
           (
-            padding: const EdgeInsets.all(24),
-            child: Container
+            child: SingleChildScrollView
             (
-              padding: const EdgeInsets.all(24),
-              constraints: LoginStyles.cardConstraints,
-              child: Column
+              child: Padding
               (
-                mainAxisSize: MainAxisSize.min,
-                children: 
-                [
-                  const Text
+                padding: const EdgeInsets.all(24),
+                child: Container
+                (
+                  padding: const EdgeInsets.all(24),
+                  constraints: LoginStyles.cardConstraints,
+                  child: Column
                   (
-                    "What do you know?\nDo you know things?\nLet’s find out!",
-                    textAlign: TextAlign.center,
-                    style: LoginStyles.headerText,
+                    mainAxisSize: MainAxisSize.min,
+                    //Title Screen, Login/Signup fields, and buttons
+                    children: 
+                    [
+                  AnimatedBuilder
+                  (
+                    animation: _pulseScale,
+                    builder: (_, child)
+                    {
+                      return Transform.scale
+                      (
+                        scale: _pulseScale.value,
+                        child: child,
+                      );
+                    },
+                    child: Padding
+                    (
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: SizedBox
+                      (
+                        width: double.infinity,
+                        child: AspectRatio
+                        (
+                          aspectRatio: .9,
+                          child: SvgPicture.asset
+                          (
+                            "assets/images/title_screen.svg",
+                            fit: BoxFit.fitWidth,
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
 
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 10),
 
                   if (!isLogin)
                     Container
@@ -311,7 +366,7 @@ class _LoginScreenState extends State<LoginScreen>
                           : isLogin
                               ? "Login"
                               : "Sign Up",
-                        style: const TextStyle(fontSize: 18),
+                        style: const TextStyle(fontSize: 25, fontWeight: FontWeight.w100),
                       ),
                     ),
                   ),
@@ -352,12 +407,15 @@ class _LoginScreenState extends State<LoginScreen>
                       textAlign: TextAlign.center,
                     ),
                   ],
-                ],
+                    ],
+                  ),
+                ),
               ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }
 }
+
