@@ -77,7 +77,7 @@ Future<void> showEndedGameScoreDialog({
         title: Text(winnerLabel),
         content: Column(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Text("$currentUsername: $currentScore"),
             const SizedBox(height: 8),
@@ -89,6 +89,52 @@ Future<void> showEndedGameScoreDialog({
             onPressed: () => Navigator.pop(dialogContext),
             child: const Text("Close"),
           ),
+        ],
+      );
+    },
+  );
+}
+
+Future<bool?> showActiveGameScoreDialog({
+  required BuildContext context,
+  required int currentRound,
+  required String currentUsername,
+  required int currentScore,
+  required String opponentUsername,
+  required int opponentScore,
+  required bool canPlay,
+}) async {
+  return showDialog<bool>(
+    context: context,
+    builder: (dialogContext) {
+      return AlertDialog(
+        title: Center(
+          child: Text(
+            "Round $currentRound",
+            textAlign: TextAlign.center,
+          )
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            const Text("Current Score"),
+            const SizedBox(height: 10),
+            Text("$currentUsername: $currentScore"),
+            const SizedBox(height: 8),
+            Text("$opponentUsername: $opponentScore"),
+          ],
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text("Close"),
+          ),
+          if (canPlay)
+            ElevatedButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text("Play"),
+            ),
         ],
       );
     },

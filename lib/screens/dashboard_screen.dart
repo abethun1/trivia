@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -173,6 +174,13 @@ class _DashboardScreenState extends State<DashboardScreen>
     setState(() {
       profile = UserProfile.fromMap(data);
     });
+  }
+
+  Future<void> handleDashboardRefresh() async
+  {
+    await refreshUserProfile();
+    if (!mounted) return;
+    setState(() {});
   }
 
   Map<String, List<Game>> bucketGames(List<Game> games, String userId)
@@ -398,10 +406,146 @@ Future<Map<String, UserProfile>> fetchProfilesForGames(List<Game> games) async
   return map;
 }
 
-Future<void> onEndedGameTap(Game game) async
+Future<Map<String, String>> fetchUsernamesForPlayers(List<String> playerIds) async
+{
+  if (playerIds.isEmpty)
+  {
+    return {};
+  }
+
+  final rows = await Supabase.instance.client
+      .from('user_profiles')
+      .select('id, username')
+      .inFilter('id', playerIds);
+
+  final usernames = <String, String>{};
+  for (final row in rows)
+  {
+    usernames[row['id'] as String] = row['username'] as String;
+  }
+
+  return usernames;
+}
+
+Future<bool> showActiveScoreDialogForGame(Game game, {required bool canPlay}) async
 {
   final client = Supabase.instance.client;
   final userId = client.auth.currentUser!.id;
+  final players = List<String>.from(game.playerIds);
+  if (players.isEmpty)
+  {
+    return false;
+  }
+
+  final usernames = await fetchUsernamesForPlayers(players);
+
+  final opponentId = players.firstWhere(
+    (id) => id != userId,
+    orElse: () => userId,
+  );
+
+  final currentUsername = usernames[userId] ?? profile.username;
+  final opponentUsername = usernames[opponentId] ?? 'Opponent';
+  final currentScore = game.scores[userId] ?? 0;
+  final opponentScore = game.scores[opponentId] ?? 0;
+
+  if (!mounted) return false;
+
+  final playPressed = await showActiveGameScoreDialog(
+    context: context,
+    currentRound: game.currentRound,
+    currentUsername: currentUsername,
+    currentScore: currentScore,
+    opponentUsername: opponentUsername,
+    opponentScore: opponentScore,
+    canPlay: canPlay,
+  );
+
+  return playPressed == true;
+}
+
+Future<void> onTheirTurnGameTap(Game game) async
+{
+  await showActiveScoreDialogForGame(game, canPlay: false);
+}
+
+Future<void> onYourTurnGameTap(Game game) async
+{
+  final shouldPlay = await showActiveScoreDialogForGame(game, canPlay: true);
+  if (!shouldPlay || !mounted)
+  {
+    return;
+  }
+
+  final questionsReady = await areQuestionsReadyForGame(game);
+  if (!questionsReady || !mounted)
+  {
+    await showGameStillLoadingDialog();
+    return;
+  }
+
+  await Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (_) => QuestionScreen(game: game),
+    ),
+  );
+  if (!mounted) return;
+  setState(() {});
+}
+
+int expectedQuestionCountForRound(int round)
+{
+  return round >= finalRoundNumber ? 1 : 5;
+}
+
+Future<bool> areQuestionsReadyForGame(Game game) async
+{
+  try
+  {
+    final requiredCount = expectedQuestionCountForRound(game.currentRound);
+    final rows = await Supabase.instance.client
+        .from('game_questions')
+        .select('id')
+        .eq('game_id', game.id)
+        .eq('round', game.currentRound)
+        .limit(requiredCount);
+
+    return rows.length >= requiredCount;
+  }
+  catch (_)
+  {
+    return false;
+  }
+}
+
+Future<void> showGameStillLoadingDialog() async
+{
+  if (!mounted) return;
+
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext)
+    {
+      return AlertDialog(
+        title: const Text("Game Still Loading"),
+        content: const Text(
+          "This game is still loading. Check internet connection and try again.",
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text("OK"),
+          ),
+        ],
+      );
+    },
+  );
+}
+
+Future<void> onEndedGameTap(Game game) async
+{
+  final userId = Supabase.instance.client.auth.currentUser!.id;
 
   final players = List<String>.from(game.playerIds);
   if (players.isEmpty)
@@ -409,16 +553,7 @@ Future<void> onEndedGameTap(Game game) async
     return;
   }
 
-  final profiles = await client
-      .from('user_profiles')
-      .select('id, username')
-      .inFilter('id', players);
-
-  final usernames = <String, String>{};
-  for (final row in profiles)
-  {
-    usernames[row['id'] as String] = row['username'] as String;
-  }
+  final usernames = await fetchUsernamesForPlayers(players);
 
   final opponentId = players.firstWhere(
     (id) => id != userId,
@@ -570,16 +705,48 @@ Future<void> onEndedGameTap(Game game) async
                   (game) => buildGameAvatarButton(
                     game,
                     profilesById,
-                    onTap: () async {
-                      await Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => QuestionScreen(game: game),
-                        ),
-                      );
-                      if (!mounted) return;
-                      setState(() {});
-                    },
+                    onTap: () => onYourTurnGameTap(game),
+                  ),
+                )
+                .toList(),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget buildTheirTurnSection(
+    String title,
+    List<Game> games,
+    Map<String, UserProfile> profilesById,
+  )
+  {
+    if (games.isEmpty)
+    {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: DashboardStyles.sectionTitle),
+          const SizedBox(height: 8),
+          const Text("No games"),
+        ],
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: DashboardStyles.sectionTitle),
+        const SizedBox(height: 8),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: games
+                .map(
+                  (game) => buildGameAvatarButton(
+                    game,
+                    profilesById,
+                    onTap: () => onTheirTurnGameTap(game),
                   ),
                 )
                 .toList(),
@@ -639,10 +806,18 @@ Future<void> onEndedGameTap(Game game) async
 
       body: AppBackground(
         child: SafeArea(
-          child: SingleChildScrollView(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
+          child: CustomScrollView(
+            physics: const BouncingScrollPhysics(
+              parent: AlwaysScrollableScrollPhysics(),
+            ),
+            slivers: [
+              CupertinoSliverRefreshControl(
+                onRefresh: handleDashboardRefresh,
+              ),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
             children:
             [
               // TOP ROW
@@ -787,7 +962,7 @@ Future<void> onEndedGameTap(Game game) async
 
                           Align(
                             alignment: Alignment.centerLeft,
-                            child: buildGameSection(
+                            child: buildTheirTurnSection(
                               "Their Turn",
                               theirTurnGames,
                               profilesById,
@@ -830,8 +1005,10 @@ Future<void> onEndedGameTap(Game game) async
                 },
               ),
             ],
+                  ),
+                ),
               ),
-            ),
+            ],
           ),
         ),
       ),

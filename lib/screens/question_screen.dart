@@ -47,7 +47,7 @@ class _QuestionScreenState extends State<QuestionScreen> {
   List<Map<String, dynamic>> questions = [];
   List<String> currentAnswers = [];
 
-  bool get isFinalRound => widget.game.currentRound == finalRoundNumber;
+  bool get isFinalRound => widget.game.currentRound >= finalRoundNumber;
   int get timerDuration => isFinalRound ? finalQuestionTime : normalQuestionTime;
 
   @override
@@ -218,13 +218,15 @@ class _QuestionScreenState extends State<QuestionScreen> {
     final q = questions[currentQuestionIndex];
     final correct = q['correct_answer'] as String;
     final typed = rawInput.trim();
-    final wager = finalBetAmount ?? 0;
+    final currentTotal = currentPlayerTotalScore();
+    final isZeroPointFinal = currentTotal <= 0;
+    final wager = isZeroPointFinal ? 1 : (finalBetAmount ?? 0);
     final isCorrect = isTypedAnswerCorrect(typed, correct);
 
     if (isCorrect) {
       roundScore += wager;
       correctAnswersThisTurn++;
-    } else {
+    } else if (!isZeroPointFinal) {
       roundScore -= wager;
     }
 
@@ -256,7 +258,7 @@ class _QuestionScreenState extends State<QuestionScreen> {
 
   int totalPossiblePointsForTurn() {
     if (isFinalRound) {
-      return finalBetAmount ?? 0;
+      return currentPlayerTotalScore() <= 0 ? 1 : (finalBetAmount ?? 0);
     }
 
     return questions.fold<int>(
@@ -361,7 +363,7 @@ class _QuestionScreenState extends State<QuestionScreen> {
       final updatedScores = Map<String, int>.from(widget.game.scores);
 
       final currentScore = updatedScores[userId] ?? 0;
-      updatedScores[userId] = currentScore + earnedScore;
+      updatedScores[userId] = max(0, currentScore + earnedScore);
 
       final players = widget.game.playerIds;
       final currentIndex = players.indexOf(userId);
@@ -425,10 +427,11 @@ class _QuestionScreenState extends State<QuestionScreen> {
   }
 
   String? validateBet(int currentTotalScore) {
+    if (currentTotalScore <= 0) return null;
     final bet = parseBetValue();
     if (bet == null) return "Enter a valid integer";
-    if (bet <= 0) return "Bet must be greater than 0";
-    if (bet >= currentTotalScore) {
+    if (bet < 0) return "Bet must be greater than or equal to 0";
+    if (bet > currentTotalScore) {
       return "Bet must be less than your total score";
     }
     return null;
@@ -436,6 +439,16 @@ class _QuestionScreenState extends State<QuestionScreen> {
 
   void startFinalRoundQuestion() {
     final totalScore = currentPlayerTotalScore();
+    if (totalScore <= 0) {
+      setState(() {
+        finalBetAmount = 1;
+        finalRoundStarted = true;
+        betErrorText = null;
+      });
+      startTimer();
+      return;
+    }
+
     final validationError = validateBet(totalScore);
 
     if (validationError != null) {
@@ -482,21 +495,30 @@ class _QuestionScreenState extends State<QuestionScreen> {
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Expanded(
-                    child: TextField(
-                      controller: betController,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: "Bet",
-                        border: OutlineInputBorder(),
-                      ),
-                      onChanged: (_) {
-                        if (betErrorText != null) {
-                          setState(() {
-                            betErrorText = null;
-                          });
-                        }
-                      },
-                    ),
+                    child: totalScore <= 0
+                        ? const TextField(
+                            enabled: false,
+                            decoration: InputDecoration(
+                              labelText: "Bet",
+                              border: OutlineInputBorder(),
+                              hintText: "Auto: 1 point if correct",
+                            ),
+                          )
+                        : TextField(
+                            controller: betController,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              labelText: "Bet",
+                              border: OutlineInputBorder(),
+                            ),
+                            onChanged: (_) {
+                              if (betErrorText != null) {
+                                setState(() {
+                                  betErrorText = null;
+                                });
+                              }
+                            },
+                          ),
                   ),
                   const SizedBox(width: 12),
                   Text(
@@ -512,16 +534,17 @@ class _QuestionScreenState extends State<QuestionScreen> {
                   style: const TextStyle(color: Colors.red),
                 ),
               ],
-              if (totalScore <= 1) ...[
+              if (totalScore <= 0) ...[
                 const SizedBox(height: 8),
                 const Text(
-                  "You need at least 2 total points to place a valid bet.",
-                  style: TextStyle(color: Colors.red),
+                  "You have 0 points. Correct answer: +1 point. Incorrect answer: +0 points.",
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                  textAlign: TextAlign.center,
                 ),
               ],
               const SizedBox(height: 24),
               ElevatedButton(
-                onPressed: totalScore <= 1 ? null : startFinalRoundQuestion,
+                onPressed: startFinalRoundQuestion,
                 child: const Text("Go To Question"),
               ),
             ],
@@ -594,15 +617,21 @@ class _QuestionScreenState extends State<QuestionScreen> {
 
     return SizedBox(
       width: double.infinity,
-      height: 55,
       child: ElevatedButton(
         onPressed: () => checkAnswer(text),
         style: QuestionStyles.answerButtonStyle.copyWith(
           backgroundColor: WidgetStatePropertyAll(backgroundColor),
           foregroundColor: WidgetStatePropertyAll(textColor),
+          minimumSize: const WidgetStatePropertyAll(Size(0, 55)),
+          padding: const WidgetStatePropertyAll(
+            EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          ),
         ),
         child: Text(
           text,
+          textAlign: TextAlign.center,
+          softWrap: true,
+          overflow: TextOverflow.visible,
           style: QuestionStyles.answerTextStyle.copyWith(color: textColor),
         ),
       ),

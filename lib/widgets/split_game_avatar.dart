@@ -128,13 +128,6 @@ class _SplitGameAvatarState extends State<SplitGameAvatar> {
               blendWithWhite(leftColor, 0.42),
             ],
           ),
-          boxShadow: [
-            BoxShadow(
-              color: accent.withValues(alpha: 0.4),
-              blurRadius: widget.size * 0.22,
-              offset: const Offset(0, 4),
-            ),
-          ],
         ),
         child: Container(
           padding: const EdgeInsets.all(3),

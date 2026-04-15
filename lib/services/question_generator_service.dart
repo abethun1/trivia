@@ -40,6 +40,7 @@ Future<void> generateRoundQuestions({
 
   final List<Map<String, dynamic>> rows = [];
   final Set<String> seenQuestions = {};
+  final isFinalRound = round >= finalRoundNumber;
 
   List<String> allowedDifficulties;
   if (round == 1) {
@@ -47,10 +48,10 @@ Future<void> generateRoundQuestions({
   } else if (round == 2) {
     allowedDifficulties = ['medium', 'hard'];
   } else {
-    allowedDifficulties = ['hard'];
+    allowedDifficulties = ['medium'];
   }
 
-  final questionTargetCount = round >= finalRoundNumber ? 1 : 5;
+  final questionTargetCount = isFinalRound ? 1 : 5;
 
   while (rows.length < questionTargetCount) {
     await Future.delayed(const Duration(seconds: 1));
@@ -62,8 +63,10 @@ Future<void> generateRoundQuestions({
     final difficulty =
         allowedDifficulties[random.nextInt(allowedDifficulties.length)];
 
+    final questionTypeParam = isFinalRound ? "" : "&type=multiple";
     final url =
-        "https://opentdb.com/api.php?amount=1&type=multiple"
+        "https://opentdb.com/api.php?amount=1"
+        "$questionTypeParam"
         "&category=$categoryId"
         "&difficulty=$difficulty"
         "&token=$token";
