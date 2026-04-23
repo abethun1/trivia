@@ -829,13 +829,37 @@ Future<void> onEndedGameTap(Game game) async
                     child: Container(
                       padding: const EdgeInsets.all(20),
                       decoration: statsCardDecorationForProfile(),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      child: Row(
                         children:
                         [
-                          Text("Rank: ${profile.rank}", style: DashboardStyles.statsText),
-                          Text("Top Category: ${profile.top_category}", style: DashboardStyles.statsText),
-                          Text("Correct Answers: ${profile.correctAnswers}", style: DashboardStyles.statsText),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children:
+                              [
+                                Text("Rank: ${profile.rank}", style: DashboardStyles.statsText),
+                                Text("Top Category: ${profile.top_category}", style: DashboardStyles.statsText),
+                                Text("Correct Answers: ${profile.correctAnswers}", style: DashboardStyles.statsText),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            mainAxisSize: MainAxisSize.min,
+                            children:
+                            [
+                              const SizedBox(height: 6),
+                              Image.asset(
+                                "assets/images/gem_img.png",
+                                width: 50,
+                                height: 50,
+                                fit: BoxFit.contain,
+                              ),
+                              const SizedBox(height: 2),
+                              Text("${profile.gemCount}", style: DashboardStyles.statsText),
+                            ],
+                          ),
                         ],
                       ),
                     ),
