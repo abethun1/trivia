@@ -44,6 +44,8 @@ class DashboardScreen extends StatefulWidget
 
 class _DashboardScreenState extends State<DashboardScreen> 
 {
+  static const int gameCreationGemCost = 3;
+
   Color parseHexColor(String hex, {Color fallback = const Color(0xFF7D798A)})
   {
     final clean = hex.replaceAll('#', '').trim();
@@ -341,6 +343,25 @@ Future<void> onRequestTap(Game game) async
    */
   Future<void> startNewGame(BuildContext context) async
   {
+    if (profile.gemCount < gameCreationGemCost)
+    {
+      await showDialog<void>
+      (
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text("Not enough gems"),
+          content: const Text("You need at least 3 gems to start a new game."),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("OK"),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
     final game = await Navigator.push<Game>
     (
       context,
@@ -350,13 +371,49 @@ Future<void> onRequestTap(Game game) async
     if (game == null) return;
 
     final client = Supabase.instance.client;
+    final userId = client.auth.currentUser!.id;
+    final latestProfile = await client
+        .from('user_profiles')
+        .select('gem_count')
+        .eq('id', userId)
+        .single();
+
+    final latestGemCount = (latestProfile['gem_count'] ?? 0) as int;
+    if (latestGemCount < gameCreationGemCost)
+    {
+      if (!mounted) return;
+      await showDialog<void>
+      (
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text("Not enough gems"),
+          content: const Text("You need at least 3 gems to start a new game."),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("OK"),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    final updatedGemCount = latestGemCount - gameCreationGemCost;
+
+    await client
+        .from('user_profiles')
+        .update({'gem_count': updatedGemCount})
+        .eq('id', userId);
 
     await client
         .from('games')
         .insert(game.toInsertJson());
 
     if (!mounted) return;
-    setState(() {});
+    setState(() {
+      profile = profile.copyWith(gemCount: updatedGemCount);
+    });
   }
 
 
@@ -927,15 +984,46 @@ Future<void> onEndedGameTap(Game game) async
 
               const SizedBox(height: 20),
 
-              // START GAME BUTTON
-              SizedBox
-              (
-                width: size.width * 0.8,
-                child: ElevatedButton(
-                  onPressed: () => startNewGame(context),
-                  style: DashboardStyles.startGameButtonStyle,
-                  child: const Text("Start New Game", style: TextStyle(fontSize: 25, fontWeight: FontWeight.w100)),
-                ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children:
+                [
+                 Expanded(
+                  child: 
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: 
+                    [
+                      // START GAME BUTTON
+                      SizedBox
+                      (
+                        width: size.width * 0.45,
+                        child: ElevatedButton(
+                          onPressed: () => startNewGame(context),
+                          style: DashboardStyles.startGameButtonStyle,
+                          child: const Text("Start New Game", style: TextStyle(fontSize: 25, fontWeight: FontWeight.w100)),
+                        ),
+                      ),
+                    ]
+                  )
+                 ),
+                 Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: 
+                    [
+                      // START GAME BUTTON
+                      SizedBox
+                      (
+                        width: size.width * 0.45,
+                        child: ElevatedButton(
+                          onPressed: () => null,
+                          style: DashboardStyles.startGameButtonStyle,
+                          child: const Text("Minute Mode", style: TextStyle(fontSize: 25, fontWeight: FontWeight.w100)),
+                        ),
+                      ),
+                    ]
+                  )
+                ],
               ),
 
               const SizedBox(height: 24),
