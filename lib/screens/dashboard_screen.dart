@@ -13,6 +13,7 @@ import '../styles/dashboard_styles.dart';
 import 'player_select_screen.dart';
 import 'settings_screen.dart';
 import 'question_screen.dart';
+import 'unlimited_mode_screen.dart';
 
 //Dialogs
 import '../dialogs/dashboard_dailogs.dart';
@@ -44,6 +45,9 @@ class DashboardScreen extends StatefulWidget
 
 class _DashboardScreenState extends State<DashboardScreen> 
 {
+  static const int gameCreationGemCost = 3;
+  static const int minuteModeGemCost = 5;
+
   Color parseHexColor(String hex, {Color fallback = const Color(0xFF7D798A)})
   {
     final clean = hex.replaceAll('#', '').trim();
@@ -176,8 +180,44 @@ class _DashboardScreenState extends State<DashboardScreen>
     });
   }
 
+  Future<void> purgeEndedUnlimitedModeGames() async
+  {
+    final client = Supabase.instance.client;
+
+    List<dynamic> rows = [];
+    try
+    {
+      rows = await client
+          .from('unlimited_mode')
+          .select('id')
+          .eq('status', 'ended');
+    }
+    catch (_)
+    {
+      return;
+    }
+
+    final ids = rows
+        .map<String>((row) => (row['id'] ?? '').toString())
+        .where((id) => id.isNotEmpty)
+        .toList();
+
+    for (final id in ids)
+    {
+      try
+      {
+        await client
+            .from('unlimited_mode')
+            .delete()
+            .eq('id', id);
+      }
+      catch (_) {}
+    }
+  }
+
   Future<void> handleDashboardRefresh() async
   {
+    await purgeEndedUnlimitedModeGames();
     await refreshUserProfile();
     if (!mounted) return;
     setState(() {});
@@ -341,6 +381,25 @@ Future<void> onRequestTap(Game game) async
    */
   Future<void> startNewGame(BuildContext context) async
   {
+    if (profile.gemCount < gameCreationGemCost)
+    {
+      await showDialog<void>
+      (
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text("Not enough gems"),
+          content: const Text("You need at least 3 gems to start a new game."),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("OK"),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
     final game = await Navigator.push<Game>
     (
       context,
@@ -350,13 +409,49 @@ Future<void> onRequestTap(Game game) async
     if (game == null) return;
 
     final client = Supabase.instance.client;
+    final userId = client.auth.currentUser!.id;
+    final latestProfile = await client
+        .from('user_profiles')
+        .select('gem_count')
+        .eq('id', userId)
+        .single();
+
+    final latestGemCount = (latestProfile['gem_count'] ?? 0) as int;
+    if (latestGemCount < gameCreationGemCost)
+    {
+      if (!mounted) return;
+      await showDialog<void>
+      (
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text("Not enough gems"),
+          content: const Text("You need at least 3 gems to start a new game."),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("OK"),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    final updatedGemCount = latestGemCount - gameCreationGemCost;
+
+    await client
+        .from('user_profiles')
+        .update({'gem_count': updatedGemCount})
+        .eq('id', userId);
 
     await client
         .from('games')
         .insert(game.toInsertJson());
 
     if (!mounted) return;
-    setState(() {});
+    setState(() {
+      profile = profile.copyWith(gemCount: updatedGemCount);
+    });
   }
 
 
@@ -365,6 +460,7 @@ Future<void> onRequestTap(Game game) async
  */
 Future<List<Game>> fetchMyGames() async
 {
+  await purgeEndedUnlimitedModeGames();
   final userId = Supabase.instance.client.auth.currentUser!.id;
 
   final data = await Supabase.instance.client
@@ -827,15 +923,39 @@ Future<void> onEndedGameTap(Game game) async
                 [
                   Expanded(
                     child: Container(
-                      padding: const EdgeInsets.all(20),
+                      padding: const EdgeInsets.all(15),
                       decoration: statsCardDecorationForProfile(),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      child: Row(
                         children:
                         [
-                          Text("Rank: ${profile.rank}", style: DashboardStyles.statsText),
-                          Text("Top Category: ${profile.top_category}", style: DashboardStyles.statsText),
-                          Text("Correct Answers: ${profile.correctAnswers}", style: DashboardStyles.statsText),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children:
+                              [
+                                Text("Rank: ${profile.rank}", style: DashboardStyles.statsText),
+                                Text("Top Category: ${profile.top_category}", style: DashboardStyles.statsText),
+                                Text("Correct Answers: ${profile.correctAnswers}", style: DashboardStyles.statsText),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            mainAxisSize: MainAxisSize.min,
+                            children:
+                            [
+                              const SizedBox(height: 6),
+                              Image.asset(
+                                "assets/images/gem_img.png",
+                                width: 50,
+                                height: 50,
+                                fit: BoxFit.contain,
+                              ),
+                              const SizedBox(height: 2),
+                              Text("${profile.gemCount}", style: DashboardStyles.statsText),
+                            ],
+                          ),
                         ],
                       ),
                     ),
@@ -903,15 +1023,92 @@ Future<void> onEndedGameTap(Game game) async
 
               const SizedBox(height: 20),
 
-              // START GAME BUTTON
-              SizedBox
-              (
-                width: size.width * 0.8,
-                child: ElevatedButton(
-                  onPressed: () => startNewGame(context),
-                  style: DashboardStyles.startGameButtonStyle,
-                  child: const Text("Start New Game", style: TextStyle(fontSize: 25, fontWeight: FontWeight.w100)),
-                ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children:
+                [
+                 Expanded(
+                  child: 
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: 
+                    [
+                      // START GAME BUTTON
+                      SizedBox
+                      (
+                        width: size.width * 0.45,
+                        child: ElevatedButton(
+                          onPressed: () => startNewGame(context),
+                          style: DashboardStyles.startGameButtonStyle,
+                          child: const Text("New Game", style: TextStyle(fontSize: 25, fontWeight: FontWeight.w100)),
+                        ),
+                      ),
+                    ]
+                  )
+                 ),
+                 Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: 
+                    [
+                      // START GAME BUTTON
+                       SizedBox
+                       (
+                         width: size.width * 0.45,
+                         child: ElevatedButton(
+                           onPressed: () async
+                           {
+                             final client = Supabase.instance.client;
+                             final user = client.auth.currentUser;
+                             if (user == null) return;
+
+                             final latestProfile = await client
+                                 .from('user_profiles')
+                                 .select('gem_count')
+                                 .eq('id', user.id)
+                                 .single();
+
+                             final latestGemCount =
+                                 (latestProfile['gem_count'] ?? 0) as int;
+
+                             if (latestGemCount < minuteModeGemCost)
+                             {
+                               if (!mounted) return;
+                               await showDialog<void>
+                               (
+                                 context: context,
+                                 builder: (_) => AlertDialog(
+                                   title: const Text("Not enough gems"),
+                                   content: const Text("You need at least 5 gems to play Minute Mode."),
+                                   actions: [
+                                     TextButton(
+                                       onPressed: () => Navigator.pop(context),
+                                       child: const Text("OK"),
+                                     ),
+                                   ],
+                                 ),
+                               );
+                               return;
+                             }
+
+                              await Navigator.push<void>(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const UnlimitedModeScreen(),
+                                ),
+                              );
+
+                              if (!mounted) return;
+                              await purgeEndedUnlimitedModeGames();
+                              await refreshUserProfile();
+                              setState(() {});
+                            },
+                           style: DashboardStyles.startGameButtonStyle,
+                           child: const Text("Minute Mode", style: TextStyle(fontSize: 25, fontWeight: FontWeight.w100)),
+                         ),
+                       ),
+                    ]
+                  )
+                ],
               ),
 
               const SizedBox(height: 24),

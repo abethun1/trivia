@@ -10,6 +10,7 @@ class UserProfile
   final String avatarStatus;
   final String avatarColorHex;
   final String statsCardColorHex;
+  final int gemCount;
 
   UserProfile
   (
@@ -24,6 +25,7 @@ class UserProfile
       required this.avatarStatus,
       required this.avatarColorHex,
       required this.statsCardColorHex,
+      required this.gemCount,
     }
   );
 
@@ -41,6 +43,7 @@ class UserProfile
       avatarStatus: (map['avatar_status'] ?? 'approved') as String,
       avatarColorHex: (map['avatar_color_hex'] ?? '#D8B4FE') as String,
       statsCardColorHex: (map['stats_card_color_hex'] ?? '#7D798A') as String,
+      gemCount: (map['gem_count'] ?? 0) as int,
     );
   }
 
@@ -55,6 +58,7 @@ class UserProfile
     String? avatarStatus,
     String? avatarColorHex,
     String? statsCardColorHex,
+    int? gemCount,
   }) {
     return UserProfile(
       id: id ?? this.id,
@@ -67,6 +71,7 @@ class UserProfile
       avatarStatus: avatarStatus ?? this.avatarStatus,
       avatarColorHex: avatarColorHex ?? this.avatarColorHex,
       statsCardColorHex: statsCardColorHex ?? this.statsCardColorHex,
+      gemCount: gemCount ?? this.gemCount,
     );
   }
 }

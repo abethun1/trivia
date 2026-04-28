@@ -7,7 +7,7 @@ class DashboardStyles {
 
   // TEXT STYLES
   static const TextStyle statsText = TextStyle(
-    fontSize: 20,
+    fontSize: 17,
     fontWeight: FontWeight.w900,
   );
 
